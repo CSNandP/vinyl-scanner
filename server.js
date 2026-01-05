@@ -91,6 +91,29 @@ app.get("/api/lookup", async (req, res) => {
     // Cache it so you don’t hammer Discogs
     cache[barcode] = payload;
     saveCache();
+function flattenTracklist(tracklist = []) {
+  const out = [];
+  for (const t of tracklist) {
+    if (!t) continue;
+
+    if (Array.isArray(t.sub_tracks) && t.sub_tracks.length) {
+      for (const st of t.sub_tracks) {
+        out.push({
+          position: st.position || t.position || "",
+          title: (st.title || "").trim(),
+          duration: (st.duration || "").trim()
+        });
+      }
+    } else {
+      out.push({
+        position: (t.position || "").trim(),
+        title: (t.title || "").trim(),
+        duration: (t.duration || "").trim()
+      });
+    }
+  }
+  return out.filter(x => x.title);
+}
 
     res.json({ ...payload, cached: false });
   } catch (err) {
