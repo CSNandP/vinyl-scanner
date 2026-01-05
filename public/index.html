@@ -10,34 +10,36 @@
     h1 { margin: 0 0 6px 0; font-size: 20px; }
     #status { font-size: 14px; margin: 4px 0 8px 0; opacity: 0.9; }
 
-    /* Layout tuned for 800x480: big cover left, narrow/tall info right */
-    .card {
-      display: flex;
-      gap: 12px;
-      align-items: flex-start;
-    }
+    .card { display: flex; gap: 12px; align-items: flex-start; }
 
-    /* BIGGER cover art on the left */
+    /* BIG cover */
     #cover {
-      width: 392px;   /* up from ~320 */
-      height: 392px;  /* keeps square */
+      width: 392px;
+      height: 392px;
       object-fit: cover;
       background: #eee;
       border-radius: 12px;
       flex: 0 0 auto;
     }
 
-    /* Right column intentionally narrow to give cover more room */
     .right {
-      width: 372px;          /* 800 - padding/gap/cover ~= right column width */
-      flex: 1 1 auto;
+      width: 372px;
       min-width: 0;
     }
 
+    /* Title will be colourised dynamically */
     #title {
-      font-size: 22px;       /* slightly smaller to fit narrow column */
+      font-size: 22px;
       font-weight: 800;
       line-height: 1.1;
+      transition: color 0.4s ease;
+    }
+
+    /* Artist now bold */
+    #artist {
+      font-size: 14px;
+      margin-top: 6px;
+      font-weight: 800;
     }
 
     .meta {
@@ -49,14 +51,12 @@
     .tracks { margin-top: 10px; }
     .tracks h2 { font-size: 14px; margin: 0 0 6px 0; font-weight: 800; }
 
-    /* Deeper (taller) track box, but narrower because right column is narrower */
     .tracks-box {
       border: 1px solid #ddd;
       border-radius: 12px;
       padding: 8px 10px;
       background: #fafafa;
-
-      max-height: 300px;  /* deeper than before */
+      max-height: 300px;
       overflow: auto;
     }
 
@@ -64,15 +64,6 @@
     .tracks-box li { font-size: 13px; margin: 5px 0; }
     .pos { font-weight: 800; margin-right: 6px; }
     .dur { opacity: 0.7; margin-left: 6px; }
-
-    /* Tiny debug line (optional; helps confirm scans). Set display:none if you want it gone. */
-    #debug {
-      font-size: 11px;
-      opacity: 0.5;
-      margin-top: 6px;
-      user-select: none;
-      display: none;
-    }
   </style>
 </head>
 
@@ -81,11 +72,11 @@
   <div id="status">Ready for scan…</div>
 
   <div class="card">
-    <img id="cover" alt="Cover"/>
+    <img id="cover" alt="Cover" crossorigin="anonymous"/>
 
     <div class="right">
       <div id="title"></div>
-      <div id="artist" class="meta"></div>
+      <div id="artist"></div>
       <div id="year" class="meta"></div>
       <div id="label" class="meta"></div>
 
@@ -95,25 +86,18 @@
           <div style="opacity:.6;">Scan a record to show tracks</div>
         </div>
       </div>
-
-      <div id="debug"></div>
     </div>
   </div>
 
 <script>
   const $ = (id) => document.getElementById(id);
 
-  // If you want it to clear automatically after showing a record, set a value (ms)
-  const AUTO_CLEAR_MS = 0;
-
-  // Scanner “typing speed” tuning:
-  const GAP_RESET_MS = 250;   // gap between keys that resets scan buffer
-  const SUBMIT_AFTER_MS = 180; // submit after last digit
+  const GAP_RESET_MS = 250;
+  const SUBMIT_AFTER_MS = 180;
 
   let buffer = "";
   let lastKeyTime = 0;
   let submitTimer = null;
-  let clearTimer = null;
 
   function escapeHtml(str) {
     return String(str)
@@ -124,14 +108,15 @@
       .replaceAll("'", "&#039;");
   }
 
-  function clearDisplay(keepStatus) {
+  function clearDisplay() {
     $("title").textContent = "";
+    $("title").style.color = "";
     $("artist").textContent = "";
     $("year").textContent = "";
     $("label").textContent = "";
     $("cover").src = "";
     $("tracks").innerHTML = "<div style='opacity:.6;'>Scan a record to show tracks</div>";
-    if (!keepStatus) $("status").textContent = "Ready for scan…";
+    $("status").textContent = "Ready for scan…";
   }
 
   function renderTracks(tracklist) {
@@ -150,36 +135,78 @@
     $("tracks").innerHTML = `<ol>${items}</ol>`;
   }
 
+  /* ---- Colour extraction from album art ---- */
+  function applyTitleColourFromImage(img) {
+    try {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      const size = 40;
+
+      canvas.width = size;
+      canvas.height = size;
+
+      ctx.drawImage(img, 0, 0, size, size);
+      const data = ctx.getImageData(0, 0, size, size).data;
+
+      let r = 0, g = 0, b = 0, count = 0;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const alpha = data[i + 3];
+        if (alpha < 200) continue;
+
+        r += data[i];
+        g += data[i + 1];
+        b += data[i + 2];
+        count++;
+      }
+
+      if (!count) return;
+
+      r = Math.round(r / count);
+      g = Math.round(g / count);
+      b = Math.round(b / count);
+
+      // Boost saturation slightly
+      const boost = 1.15;
+      r = Math.min(255, Math.round(r * boost));
+      g = Math.min(255, Math.round(g * boost));
+      b = Math.min(255, Math.round(b * boost));
+
+      $("title").style.color = `rgb(${r}, ${g}, ${b})`;
+    } catch {
+      // fail silently
+    }
+  }
+
   async function lookup(barcode) {
     if (!barcode || barcode.length < 10) {
-      $("status").textContent = "Scan error: barcode too short — ready for scan…";
+      $("status").textContent = "Scan error — ready for scan…";
       return;
     }
 
-    if (clearTimer) { clearTimeout(clearTimer); clearTimer = null; }
-
-    $("status").textContent = `Looking up ${barcode}…`;
-    clearDisplay(true);
+    $("status").textContent = "Looking up…";
+    clearDisplay();
 
     try {
       const res = await fetch(`/api/lookup?barcode=${encodeURIComponent(barcode)}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Lookup failed");
 
-      $("status").textContent = data.cached ? "Loaded (cached) — ready for scan…" : "Loaded — ready for scan…";
+      $("status").textContent = "Loaded — ready for scan…";
       $("title").textContent = data.title || "";
       $("artist").textContent = (data.artists || []).join(" • ");
       $("year").textContent = data.year ? `Year: ${data.year}` : "";
       $("label").textContent = (data.labels && data.labels.length) ? `Label: ${data.labels[0]}` : "";
-      if (data.cover) $("cover").src = data.cover;
+
+      if (data.cover) {
+        const img = $("cover");
+        img.onload = () => applyTitleColourFromImage(img);
+        img.src = data.cover;
+      }
 
       renderTracks(data.tracklist);
-
-      if (AUTO_CLEAR_MS > 0) {
-        clearTimer = setTimeout(() => clearDisplay(false), AUTO_CLEAR_MS);
-      }
     } catch (e) {
-      $("status").textContent = "Error: " + e.message + " — ready for scan…";
+      $("status").textContent = "Error — ready for scan…";
     }
   }
 
@@ -188,7 +215,6 @@
     submitTimer = setTimeout(() => {
       const barcode = buffer.replace(/\D/g, "");
       buffer = "";
-      $("debug").textContent = "";
       if (barcode.length >= 10) lookup(barcode);
     }, SUBMIT_AFTER_MS);
   }
@@ -203,21 +229,18 @@
     if (e.key === "Enter") {
       const barcode = buffer.replace(/\D/g, "");
       buffer = "";
-      $("debug").textContent = "";
       if (barcode.length >= 10) lookup(barcode);
       return;
     }
 
     if (e.key.length === 1 && /[0-9]/.test(e.key)) {
       buffer += e.key;
-      $("debug").textContent = "Scan captured: " + buffer;
       scheduleSubmit();
     }
   }
 
   window.addEventListener("keydown", onAnyKey, true);
-
-  clearDisplay(false);
+  clearDisplay();
 </script>
 
 </body>
