@@ -45,12 +45,82 @@
       justify-content: center;
       z-index: 9999;
       opacity: 1;
-      transition: opacity 0.6s ease;
+      transition: opacity 0.7s ease;
+      overflow: hidden;
     }
 
     .splash.hidden {
       opacity: 0;
       pointer-events: none;
+    }
+
+    /* Animated "record groove" background */
+    .splash::before{
+      content:"";
+      position:absolute;
+      inset:-40px;
+      background:
+        /* grooves */
+        repeating-radial-gradient(circle at 50% 52%,
+          rgba(255,255,255,0.075) 0px,
+          rgba(255,255,255,0.075) 1px,
+          rgba(255,255,255,0.00) 3px,
+          rgba(255,255,255,0.00) 8px),
+        /* subtle highlight */
+        radial-gradient(700px 520px at 52% 44%,
+          rgba(255,255,255,0.08) 0%,
+          rgba(255,255,255,0.00) 60%);
+      opacity: 0.22;
+      filter: blur(0.2px);
+      transform-origin: 50% 52%;
+      animation: grooveRotate 20s linear infinite;
+    }
+
+    .splash::after{
+      /* gentle “scan-line / shimmer” drift across grooves */
+      content:"";
+      position:absolute;
+      inset:-40px;
+      background:
+        linear-gradient(110deg,
+          rgba(255,255,255,0.00) 0%,
+          rgba(255,255,255,0.06) 45%,
+          rgba(255,255,255,0.00) 60%);
+      opacity: 0.20;
+      transform: translateX(-40%);
+      animation: shimmer 6.8s ease-in-out infinite;
+      mix-blend-mode: screen;
+      pointer-events: none;
+    }
+
+    @keyframes grooveRotate {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+
+    @keyframes shimmer {
+      0%, 100% { transform: translateX(-55%) translateY(0); opacity: 0.12; }
+      50%      { transform: translateX(25%) translateY(-6px); opacity: 0.22; }
+    }
+
+    .splash-inner{
+      position: relative;
+      z-index: 1;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      padding: 0 16px;
+      text-align:center;
+    }
+
+    /* Text container so we can animate out/in smoothly */
+    .splash-title-wrap{
+      height: 62px; /* fixed height so layout doesn't jump */
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      overflow:hidden;
     }
 
     .splash-title {
@@ -60,10 +130,22 @@
       text-transform: uppercase;
       margin: 0;
       line-height: 1.0;
-      text-align: center;
-      padding: 0 16px;
       animation: breathe 2.8s ease-in-out infinite;
       will-change: transform, opacity;
+      transform: translateY(0);
+      opacity: 1;
+      transition: opacity 0.55s ease, transform 0.55s ease;
+      white-space: nowrap;
+    }
+
+    /* Fade/slide states */
+    .splash-title.out {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    .splash-title.in {
+      opacity: 1;
+      transform: translateY(0);
     }
 
     .splash-sub {
@@ -265,10 +347,9 @@
       padding: 8px 10px;
       background: rgba(255,255,255,0.50);
       transition: background 0.7s ease, border-color 0.7s ease;
-
       flex: 1 1 auto;
       min-height: 0;
-      overflow: auto; /* only scroll if absolutely necessary */
+      overflow: auto;
     }
 
     .side{
@@ -317,8 +398,12 @@
 <body>
   <!-- Splash overlay -->
   <div id="splash" class="splash">
-    <div id="splashTitle" class="splash-title">Scan Record</div>
-    <div class="splash-sub">Ready</div>
+    <div class="splash-inner">
+      <div class="splash-title-wrap">
+        <div id="splashTitle" class="splash-title">Scan Record</div>
+      </div>
+      <div class="splash-sub">Ready</div>
+    </div>
   </div>
 
   <div class="frame">
@@ -360,7 +445,7 @@
   let lastKeyTime = 0;
   let submitTimer = null;
 
-  // --- Splash: font cycling ---
+  // --- Splash: smooth fade/slide font cycling ---
   const splash = $("splash");
   const splashTitle = $("splashTitle");
 
@@ -377,18 +462,38 @@
 
   let fontIdx = 0;
   let fontTimer = null;
+  let fontBusy = false;
 
   function startSplashFonts(){
     if (!splashTitle) return;
+
     splashTitle.style.fontFamily = fontCycle[0];
-    fontTimer = setInterval(() => {
+
+    // Every cycle: fade/slide out -> swap font -> fade/slide in
+    fontTimer = setInterval(async () => {
+      if (fontBusy) return;
+      fontBusy = true;
+
+      splashTitle.classList.add("out");
+      splashTitle.classList.remove("in");
+
+      // wait for half the transition so it’s fully “gone”
+      await new Promise(r => setTimeout(r, 320));
+
       fontIdx = (fontIdx + 1) % fontCycle.length;
       splashTitle.style.fontFamily = fontCycle[fontIdx];
-    }, 1300);
+
+      // bring it back
+      splashTitle.classList.remove("out");
+      splashTitle.classList.add("in");
+
+      await new Promise(r => setTimeout(r, 320));
+      fontBusy = false;
+    }, 1400);
   }
 
   function hideSplashOnce(){
-    // Hide splash only once per page-load session.
+    if (!splash) return;
     if (sessionStorage.getItem("started") === "1") return;
 
     sessionStorage.setItem("started", "1");
