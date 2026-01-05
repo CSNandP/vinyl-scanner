@@ -34,6 +34,54 @@
       overflow: hidden;
     }
 
+    /* ---------- SPLASH ---------- */
+    .splash {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      opacity: 1;
+      transition: opacity 0.6s ease;
+    }
+
+    .splash.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .splash-title {
+      font-size: 52px;
+      letter-spacing: 1.2px;
+      color: rgba(255,255,255,0.95);
+      text-transform: uppercase;
+      margin: 0;
+      line-height: 1.0;
+      text-align: center;
+      padding: 0 16px;
+      animation: breathe 2.8s ease-in-out infinite;
+      will-change: transform, opacity;
+    }
+
+    .splash-sub {
+      margin-top: 18px;
+      font-size: 13px;
+      letter-spacing: 1.6px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.55);
+      opacity: 0.9;
+      user-select: none;
+    }
+
+    @keyframes breathe {
+      0%, 100% { transform: translateY(0); opacity: 0.92; }
+      50%      { transform: translateY(-2px); opacity: 1.00; }
+    }
+
+    /* ---------- LAYOUT ---------- */
     .frame{
       display:flex;
       flex-direction:column;
@@ -220,11 +268,11 @@
 
       flex: 1 1 auto;
       min-height: 0;
-      overflow: auto;
+      overflow: auto; /* only scroll if absolutely necessary */
     }
 
     .side{
-      margin: 8px 0 6px 0;
+      margin: 8px 0 5px 0;
       font-size: 11.5px;
       font-weight: 950;
       letter-spacing: 0.9px;
@@ -232,21 +280,11 @@
       opacity: 0.62;
     }
 
-    /* ✅ Two-column track layout */
-    .cols{
-      column-count: 2;
-      column-gap: 16px;
-      column-fill: auto;
-    }
-
-    .track{
-      break-inside: avoid;
-      -webkit-column-break-inside: avoid;
-      page-break-inside: avoid;
+    .tracks-box ol{ margin: 0; padding-left: 18px; }
+    .tracks-box li{
       font-size: 12.8px;
-      margin: 0 0 6px 0;
+      margin: 5px 0;
       line-height: 1.12;
-      display: block;
     }
 
     .pos{
@@ -277,6 +315,12 @@
 </head>
 
 <body>
+  <!-- Splash overlay -->
+  <div id="splash" class="splash">
+    <div id="splashTitle" class="splash-title">Scan Record</div>
+    <div class="splash-sub">Ready</div>
+  </div>
+
   <div class="frame">
     <div class="topline">
       <div id="status">Ready for scan…</div>
@@ -315,6 +359,51 @@
   let buffer = "";
   let lastKeyTime = 0;
   let submitTimer = null;
+
+  // --- Splash: font cycling ---
+  const splash = $("splash");
+  const splashTitle = $("splashTitle");
+
+  const fontCycle = [
+    'system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
+    '"Trebuchet MS", system-ui, sans-serif',
+    '"Arial Black", Arial, system-ui, sans-serif',
+    'Georgia, "Times New Roman", serif',
+    '"Palatino Linotype", Palatino, serif',
+    '"Courier New", Courier, monospace',
+    '"Gill Sans", "Segoe UI", system-ui, sans-serif',
+    'Impact, "Arial Black", system-ui, sans-serif'
+  ];
+
+  let fontIdx = 0;
+  let fontTimer = null;
+
+  function startSplashFonts(){
+    if (!splashTitle) return;
+    splashTitle.style.fontFamily = fontCycle[0];
+    fontTimer = setInterval(() => {
+      fontIdx = (fontIdx + 1) % fontCycle.length;
+      splashTitle.style.fontFamily = fontCycle[fontIdx];
+    }, 1300);
+  }
+
+  function hideSplashOnce(){
+    // Hide splash only once per page-load session.
+    if (sessionStorage.getItem("started") === "1") return;
+
+    sessionStorage.setItem("started", "1");
+    splash.classList.add("hidden");
+    setTimeout(() => splash.remove(), 900);
+
+    if (fontTimer) clearInterval(fontTimer);
+  }
+
+  // If already started in this session, remove splash immediately
+  if (sessionStorage.getItem("started") === "1") {
+    splash.remove();
+  } else {
+    startSplashFonts();
+  }
 
   function setStatus(text){
     const el = $("status");
@@ -369,8 +458,7 @@
     return m ? m[1] : "";
   }
 
-  /* ✅ Two-column renderer with side headings */
-  function renderTracksTwoColumns(tracklist) {
+  function renderTracksGrouped(tracklist) {
     if (!Array.isArray(tracklist) || !tracklist.length) {
       $("tracks").innerHTML = "<div style='opacity:.6;'>No track listing found</div>";
       return;
@@ -387,16 +475,13 @@
     }
 
     let html = "";
-
     for (const side of order) {
       if (side) html += `<div class="side">Side ${side}</div>`;
-
-      // Wrap tracks for this side in a two-column container
-      html += `<div class="cols">` + groups[side].map(t => {
+      html += "<ol>" + groups[side].map(t => {
         const pos = t.position ? `<span class="pos">${t.position}</span>` : "";
         const dur = t.duration ? ` <span class="dur">(${t.duration})</span>` : "";
-        return `<span class="track">${pos}${t.title || ""}${dur}</span>`;
-      }).join("") + `</div>`;
+        return `<li>${pos}${t.title || ""}${dur}</li>`;
+      }).join("") + "</ol>";
     }
 
     $("tracks").innerHTML = html;
@@ -451,6 +536,9 @@
   async function lookup(code) {
     if (!code || code.length < 10) return;
 
+    // Splash disappears on first valid scan attempt
+    hideSplashOnce();
+
     setStatus("Looking up…");
     clearReveal();
     clearDisplay(true);
@@ -464,8 +552,7 @@
       $("artist").textContent = (data.artists||[]).join(" • ");
       $("year").textContent = data.year ? `Year: ${data.year}` : "";
       $("label").textContent = (data.labels||[]).length ? `Label: ${data.labels[0]}` : "";
-
-      renderTracksTwoColumns(data.tracklist);
+      renderTracksGrouped(data.tracklist);
 
       if (data.cover) {
         const img = $("cover");
@@ -514,6 +601,7 @@
     }
   }, true);
 
+  // initial state
   clearReveal();
   clearDisplay(false);
 </script>
