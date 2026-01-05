@@ -27,6 +27,33 @@ function saveCache() {
 function digitsOnly(s) {
   return (s || "").replace(/\D/g, "");
 }
+function flattenTracklist(tracklist = []) {
+  const out = [];
+
+  for (const t of tracklist) {
+    if (!t) continue;
+
+    // If Discogs gives nested sub-tracks, include them too
+    if (Array.isArray(t.sub_tracks) && t.sub_tracks.length) {
+      for (const st of t.sub_tracks) {
+        out.push({
+          position: st.position || t.position || "",
+          title: st.title || "",
+          duration: st.duration || ""
+        });
+      }
+    } else {
+      out.push({
+        position: t.position || "",
+        title: t.title || "",
+        duration: t.duration || ""
+      });
+    }
+  }
+
+  // Remove empty titles
+  return out.filter(x => x.title && x.title.trim().length);
+}
 
 // Node 18+ has global fetch
 async function discogsFetch(path) {
