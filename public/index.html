@@ -8,13 +8,12 @@
   <style>
     body { font-family: system-ui, sans-serif; margin: 0; padding: 14px; }
     h1 { margin: 0 0 8px 0; font-size: 22px; }
-
-    #status { font-size: 16px; margin: 6px 0 10px 0; opacity: 0.85; }
+    #status { font-size: 16px; margin: 6px 0 10px 0; opacity: 0.9; }
 
     .card { display: flex; gap: 14px; align-items: flex-start; }
     #cover {
-      width: 310px;
-      height: 310px;
+      width: 320px;
+      height: 320px;
       object-fit: cover;
       background: #eee;
       border-radius: 12px;
@@ -31,7 +30,7 @@
       border-radius: 12px;
       padding: 8px 10px;
       background: #fafafa;
-      max-height: 170px; /* fits 800x480 nicely */
+      max-height: 190px;
       overflow: auto;
     }
     .tracks-box ol { margin: 0; padding-left: 20px; }
@@ -39,14 +38,12 @@
     .pos { font-weight: 800; margin-right: 6px; }
     .dur { opacity: 0.7; margin-left: 6px; }
 
-    /* Hidden input to keep scanner happy */
-    #scannerInput {
-      position: fixed;
-      left: -9999px;
-      top: -9999px;
-      opacity: 0;
-      width: 1px;
-      height: 1px;
+    /* Tiny debug line (helps confirm scans are being captured) */
+    #debug {
+      font-size: 12px;
+      opacity: 0.55;
+      margin-top: 6px;
+      user-select: none;
     }
   </style>
 </head>
@@ -70,8 +67,52 @@
           <div style="opacity:.6;">Scan a record to show tracks</div>
         </div>
       </div>
+
+      <div id="debug"></div>
     </div>
   </div>
 
-  <!-- Always-focused hidden input -->
-  <input id="scannerInp
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  // If you want it to clear automatically after showing a record, set a value (ms)
+  const AUTO_CLEAR_MS = 0;
+
+  // Scanner “typing speed” tuning:
+  // - if gap between keys is > 250ms, we treat it as a new scan starting
+  // - we auto-submit 180ms after last digit
+  const GAP_RESET_MS = 250;
+  const SUBMIT_AFTER_MS = 180;
+
+  let buffer = "";
+  let lastKeyTime = 0;
+  let submitTimer = null;
+  let clearTimer = null;
+
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function clearDisplay(keepStatus) {
+    $("title").textContent = "";
+    $("artist").textContent = "";
+    $("year").textContent = "";
+    $("label").textContent = "";
+    $("cover").src = "";
+    $("tracks").innerHTML = "<div style='opacity:.6;'>Scan a record to show tracks</div>";
+    if (!keepStatus) $("status").textContent = "Ready for scan…";
+  }
+
+  function renderTracks(tracklist) {
+    if (!Array.isArray(tracklist) || tracklist.length === 0) {
+      $("tracks").innerHTML = "<div style='opacity:.6;'>No track listing found</div>";
+      return;
+    }
+
+    const items = tracklist.map(t => {
+      const pos = t.position ? `<span class="pos">${escapeHtml(t.position)}
