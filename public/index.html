@@ -115,4 +115,90 @@
     }
 
     const items = tracklist.map(t => {
-      const pos = t.position ? `<span class="pos">${escapeHtml(t.position)}
+      const pos = t.position ? `<span class="pos">${escapeHtml(t.position)}</span>` : "";
+      const title = escapeHtml(t.title || "");
+      const dur = t.duration ? `<span class="dur">(${escapeHtml(t.duration)})</span>` : "";
+      return `<li>${pos}${title}${dur}</li>`;
+    }).join("");
+
+    $("tracks").innerHTML = `<ol>${items}</ol>`;
+  }
+
+  async function lookup(barcode) {
+    if (!barcode || barcode.length < 10) {
+      $("status").textContent = "Scan error: barcode too short — ready for scan…";
+      return;
+    }
+
+    if (clearTimer) { clearTimeout(clearTimer); clearTimer = null; }
+
+    $("status").textContent = `Looking up ${barcode}…`;
+    clearDisplay(true);
+
+    try {
+      const res = await fetch(`/api/lookup?barcode=${encodeURIComponent(barcode)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Lookup failed");
+
+      $("status").textContent = data.cached ? "Loaded (cached) — ready for scan…" : "Loaded — ready for scan…";
+      $("title").textContent = data.title || "";
+      $("artist").textContent = (data.artists || []).join(" • ");
+      $("year").textContent = data.year ? `Year: ${data.year}` : "";
+      $("label").textContent = (data.labels && data.labels.length) ? `Label: ${data.labels[0]}` : "";
+      if (data.cover) $("cover").src = data.cover;
+      renderTracks(data.tracklist);
+
+      if (AUTO_CLEAR_MS > 0) {
+        clearTimer = setTimeout(() => clearDisplay(false), AUTO_CLEAR_MS);
+      }
+    } catch (e) {
+      $("status").textContent = "Error: " + e.message + " — ready for scan…";
+    }
+  }
+
+  function scheduleSubmit() {
+    if (submitTimer) clearTimeout(submitTimer);
+    submitTimer = setTimeout(() => {
+      const barcode = buffer.replace(/\D/g, "");
+      buffer = "";
+      $("debug").textContent = "";
+      if (barcode.length >= 10) lookup(barcode);
+    }, SUBMIT_AFTER_MS);
+  }
+
+  function onAnyKey(e) {
+    // ignore modifier combos
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    const now = Date.now();
+
+    // If there was a gap, start a fresh buffer
+    if (now - lastKeyTime > GAP_RESET_MS) buffer = "";
+    lastKeyTime = now;
+
+    if (e.key === "Enter") {
+      // Some scanners send Enter: submit immediately
+      const barcode = buffer.replace(/\D/g, "");
+      buffer = "";
+      $("debug").textContent = "";
+      if (barcode.length >= 10) lookup(barcode);
+      return;
+    }
+
+    // accept digits only
+    if (e.key.length === 1 && /[0-9]/.test(e.key)) {
+      buffer += e.key;
+      $("debug").textContent = "Scan captured: " + buffer;
+      scheduleSubmit();
+    }
+  }
+
+  // Capture keystrokes anywhere (touch-free)
+  window.addEventListener("keydown", onAnyKey, true);
+
+  // Start ready
+  clearDisplay(false);
+</script>
+
+</body>
+</html>
