@@ -14,22 +14,6 @@
     .meta { font-size: 20px; margin-top: 8px; }
     .small { font-size: 14px; opacity: 0.75; margin-top: 12px; word-break: break-word; }
     .card { margin-top: 16px; display:flex; gap:16px; align-items:flex-start; }
-
-    /* Tracklist area (scrolls nicely on 7" screen) */
-    .tracks-wrap { margin-top: 16px; }
-    .tracks-title { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
-    .tracks-box {
-      border: 1px solid #ddd;
-      border-radius: 10px;
-      padding: 10px 12px;
-      max-height: 220px;
-      overflow: auto;
-      background: #fafafa;
-    }
-    .tracks-box ol { margin: 0; padding-left: 22px; }
-    .tracks-box li { margin: 6px 0; font-size: 18px; }
-    .pos { font-weight: 700; margin-right: 6px; }
-    .dur { opacity: 0.7; margin-left: 8px; }
   </style>
 </head>
 <body>
@@ -44,18 +28,12 @@
 
   <div class="card">
     <img id="cover" alt="Cover"/>
-    <div style="flex:1;">
+    <div>
       <div id="title" style="font-size:30px; font-weight:700;"></div>
       <div id="artist" class="meta"></div>
       <div id="year" class="meta"></div>
       <div id="label" class="meta"></div>
       <div id="link" class="small"></div>
-
-      <!-- NEW: Track listing goes here -->
-      <div class="tracks-wrap">
-        <div class="tracks-title">Track listing</div>
-        <div id="tracks" class="tracks-box"></div>
-      </div>
     </div>
   </div>
 
@@ -69,33 +47,6 @@
       $("label").textContent = "";
       $("link").textContent = "";
       $("cover").src = "";
-      $("tracks").innerHTML = "";
-    }
-
-    function renderTracks(tracklist) {
-      const tracks = Array.isArray(tracklist) ? tracklist : [];
-      if (!tracks.length) {
-        $("tracks").innerHTML = `<div style="opacity:.7;">No track listing found.</div>`;
-        return;
-      }
-
-      const items = tracks.map(t => {
-        const pos = t.position ? `<span class="pos">${escapeHtml(t.position)}</span>` : "";
-        const title = escapeHtml(t.title || "");
-        const dur = t.duration ? `<span class="dur">(${escapeHtml(t.duration)})</span>` : "";
-        return `<li>${pos}${title}${dur}</li>`;
-      }).join("");
-
-      $("tracks").innerHTML = `<ol>${items}</ol>`;
-    }
-
-    function escapeHtml(str) {
-      return String(str)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
     }
 
     async function lookup() {
@@ -119,4 +70,25 @@
         $("title").textContent = data.title || "";
         $("artist").textContent = (data.artists || []).join(" • ");
         $("year").textContent = data.year ? `Year: ${data.year}` : "";
-        $("label").textContent = (data.label
+        $("label").textContent = (data.labels && data.labels.length) ? `Label: ${data.labels[0]}` : "";
+
+        if (data.cover) $("cover").src = data.cover;
+        if (data.discogsUrl) {
+          $("link").innerHTML = `Discogs: <a href="${data.discogsUrl}" target="_blank" rel="noreferrer">${data.discogsUrl}</a>`;
+        }
+      } catch (e) {
+        $("status").textContent = `Error: ${e.message}`;
+      }
+    }
+
+    $("go").addEventListener("click", lookup);
+    $("barcode").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") lookup();
+    });
+
+    // Keep focus so a USB scanner (keyboard) works nicely
+    window.addEventListener("click", () => $("barcode").focus());
+    $("barcode").focus();
+  </script>
+</body>
+</html>
