@@ -1,1 +1,95 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Vinyl Scanner</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; }
+    h1 { margin: 0 0 12px 0; }
+    .row { display:flex; gap:12px; align-items:flex-start; }
+    input { font-size: 26px; padding: 12px; width: 100%; }
+    button { font-size: 26px; padding: 12px 16px; }
+    img { width: 280px; height: 280px; object-fit: cover; background:#eee; border-radius: 10px; }
+    .meta { font-size: 20px; margin-top: 8px; }
+    .small { font-size: 14px; opacity: 0.75; margin-top: 12px; word-break: break-word; }
+    .card { margin-top: 16px; display:flex; gap:16px; align-items:flex-start; }
+  </style>
+</head>
+<body>
+  <h1>Vinyl Scanner</h1>
+
+  <div class="row">
+    <input id="barcode" placeholder="Scan or type barcode…" inputmode="numeric" autocomplete="off"/>
+    <button id="go">Search</button>
+  </div>
+
+  <div id="status" class="meta">Ready</div>
+
+  <div class="card">
+    <img id="cover" alt="Cover"/>
+    <div>
+      <div id="title" style="font-size:30px; font-weight:700;"></div>
+      <div id="artist" class="meta"></div>
+      <div id="year" class="meta"></div>
+      <div id="label" class="meta"></div>
+      <div id="link" class="small"></div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function clearDisplay() {
+      $("title").textContent = "";
+      $("artist").textContent = "";
+      $("year").textContent = "";
+      $("label").textContent = "";
+      $("link").textContent = "";
+      $("cover").src = "";
+    }
+
+    async function lookup() {
+      const raw = $("barcode").value || "";
+      const barcode = raw.replace(/\D/g, "");
+
+      if (barcode.length < 10) {
+        $("status").textContent = "Please enter a valid barcode (10+ digits).";
+        return;
+      }
+
+      $("status").textContent = "Looking up…";
+      clearDisplay();
+
+      try {
+        const res = await fetch(`/api/lookup?barcode=${encodeURIComponent(barcode)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Lookup failed");
+
+        $("status").textContent = data.cached ? "Ready (cached)" : "Ready";
+        $("title").textContent = data.title || "";
+        $("artist").textContent = (data.artists || []).join(" • ");
+        $("year").textContent = data.year ? `Year: ${data.year}` : "";
+        $("label").textContent = (data.labels && data.labels.length) ? `Label: ${data.labels[0]}` : "";
+
+        if (data.cover) $("cover").src = data.cover;
+        if (data.discogsUrl) {
+          $("link").innerHTML = `Discogs: <a href="${data.discogsUrl}" target="_blank" rel="noreferrer">${data.discogsUrl}</a>`;
+        }
+      } catch (e) {
+        $("status").textContent = `Error: ${e.message}`;
+      }
+    }
+
+    $("go").addEventListener("click", lookup);
+    $("barcode").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") lookup();
+    });
+
+    // Keep focus so a USB scanner (keyboard) works nicely
+    window.addEventListener("click", () => $("barcode").focus());
+    $("barcode").focus();
+  </script>
+</body>
+</html>
 
