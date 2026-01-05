@@ -84,6 +84,7 @@ app.get("/api/lookup", async (req, res) => {
       cover:
         (release.images && release.images.find(i => i.type === "primary")?.uri) ||
         release.thumb ||
+        tracklist: flattenTracklist(release.tracklist || [])
         null,
       discogsUrl: release.uri ? `https://www.discogs.com${release.uri}` : null
     };
