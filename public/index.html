@@ -3,186 +3,278 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=800, height=480, initial-scale=1, maximum-scale=1, user-scalable=no"/>
-  <title>Vinyl Scanner</title>
+  <title>Now Spinning</title>
 
   <style>
-    :root {
-      --bg: #ffffff;
-      --fg: #111111;
+    :root{
+      --bg:#ffffff; --fg:#111111;
       --muted: rgba(0,0,0,0.70);
-      --panel: rgba(255,255,255,0.88);
+      --panel: rgba(255,255,255,0.86);
       --border: rgba(0,0,0,0.14);
-      --wash: rgba(0,0,0,0.00);
+
+      --wash: rgba(0,0,0,0.00);        /* computed from cover */
+      --wash2: rgba(0,0,0,0.00);       /* computed from cover (lighter) */
       --title: #111111;
+
+      --shadow: rgba(0,0,0,0.16);
+      --shadow2: rgba(0,0,0,0.08);
     }
 
-    body {
-      font-family: system-ui, sans-serif;
-      margin: 0;
-      padding: 12px;
-      background:
-        linear-gradient(180deg, var(--wash), rgba(0,0,0,0) 65%),
-        var(--bg);
+    body{
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin:0;
+      padding:12px 12px 10px 12px;
       color: var(--fg);
-      transition: background 0.6s ease, color 0.6s ease;
+
+      /* Background wash refinement:
+         1) stronger "bloom" near cover area
+         2) softer vertical fade
+         3) very subtle second layer to mimic blur depth */
+      background:
+        radial-gradient(520px 520px at 210px 210px, var(--wash), rgba(0,0,0,0) 70%),
+        radial-gradient(620px 620px at 240px 240px, var(--wash2), rgba(0,0,0,0) 76%),
+        linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 52%, rgba(0,0,0,0.02) 100%),
+        var(--bg);
+
+      transition: background 0.7s ease, color 0.7s ease;
+      overflow: hidden; /* feels more kiosk-like */
     }
 
-    h1 { margin: 0 0 6px 0; font-size: 18px; opacity: 0.85; }
-    #status { font-size: 13px; margin: 4px 0 8px 0; color: var(--muted); }
+    .frame{
+      display:flex;
+      flex-direction:column;
+      height: calc(480px - 22px); /* makes footer consistent */
+    }
 
-    .card { display: flex; gap: 12px; align-items: flex-start; }
+    .content{
+      display:flex;
+      gap:12px;
+      align-items:flex-start;
+      flex: 1 1 auto;
+      min-height: 0;
+    }
 
     /* ---------- RECORD PLAYER ---------- */
-
-    .platter {
-      position: relative;
-      width: 392px;
-      height: 392px;
-      border-radius: 50%;
+    .platter{
+      position:relative;
+      width:392px;
+      height:392px;
+      border-radius:50%;
       flex: 0 0 auto;
     }
 
-    .platter::before {
-      content: "";
-      position: absolute;
-      inset: -12px;
-      border-radius: 50%;
+    .platter::before{
+      content:"";
+      position:absolute;
+      inset:-12px;
+      border-radius:50%;
       background:
         radial-gradient(circle,
-          rgba(0,0,0,0.14) 0%,
-          rgba(0,0,0,0.08) 40%,
-          rgba(0,0,0,0.03) 60%,
-          rgba(0,0,0,0.00) 72%);
-      filter: blur(8px);
-      z-index: 0;
+          rgba(0,0,0,0.16) 0%,
+          rgba(0,0,0,0.10) 38%,
+          rgba(0,0,0,0.04) 58%,
+          rgba(0,0,0,0.00) 74%);
+      filter: blur(9px);
+      z-index:0;
+      opacity: 0.95;
+      transition: opacity 0.7s ease;
     }
 
-    #cover {
-      position: relative;
-      z-index: 1;
-      width: 392px;
-      height: 392px;
-      border-radius: 50%;
-      object-fit: cover;
-      background: #eee;
-      box-shadow: 0 10px 26px rgba(0,0,0,0.18);
+    #cover{
+      position:relative;
+      z-index:1;
+      width:392px;
+      height:392px;
+      border-radius:50%;
+      object-fit:cover;
+      background:#eee;
+      box-shadow: 0 12px 30px var(--shadow);
       animation: spin 28s linear infinite;
       animation-play-state: paused;
+      opacity: 0;
+      transform: translateY(6px) scale(0.985);
+      transition: opacity 0.35s ease, transform 0.35s ease;
+      will-change: transform, opacity;
     }
 
-    .label-ring {
-      position: absolute;
-      inset: 0;
-      margin: auto;
+    #cover.show{
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    .label-ring{
+      position:absolute;
+      inset:0;
+      margin:auto;
       width: 96px;
       height: 96px;
-      border-radius: 50%;
+      border-radius:50%;
       background:
         radial-gradient(circle,
           rgba(255,255,255,0.00) 0%,
           rgba(255,255,255,0.00) 58%,
           rgba(255,255,255,0.28) 60%,
           rgba(255,255,255,0.00) 66%);
-      pointer-events: none;
-      z-index: 2;
+      pointer-events:none;
+      z-index:2;
+      opacity: 0.9;
     }
 
-    @keyframes spin {
+    @keyframes spin{
       from { transform: rotate(0deg); }
       to   { transform: rotate(360deg); }
     }
 
     /* ---------- INFO PANEL ---------- */
-
-    .right {
-      width: 372px;
-      min-width: 0;
+    .right{
+      width:372px;
+      min-width:0;
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 10px;
-      box-shadow: 0 8px 26px rgba(0,0,0,0.06);
-      transition: background 0.6s ease, border-color 0.6s ease;
+      border-radius:12px;
+      padding:10px 10px 10px 10px;
+      box-shadow: 0 10px 26px var(--shadow2);
+      transition: background 0.7s ease, border-color 0.7s ease, box-shadow 0.7s ease;
+      display:flex;
+      flex-direction:column;
+      min-height: 392px;
     }
 
-    #title {
-      font-size: 22px;
-      font-weight: 850;
-      letter-spacing: -0.2px;
-      line-height: 1.1;
+    /* Micro-animations: staged reveal */
+    .fade{
+      opacity:0;
+      transform: translateY(6px);
+      will-change: transform, opacity;
+    }
+    .fade.show{
+      opacity:1;
+      transform: translateY(0);
+      transition: opacity 0.35s ease, transform 0.35s ease;
+    }
+
+    /* Typography hierarchy polish */
+    #title{
+      font-size: 23px;
+      font-weight: 860;
+      line-height: 1.08;
+      letter-spacing: -0.3px;
       color: var(--title);
-      transition: color 0.6s ease;
+      transition: color 0.7s ease;
+      margin-top: 1px;
     }
 
-    #artist {
-      font-size: 14px;
-      margin-top: 6px;
+    #artist{
+      font-size: 15px;
+      margin-top: 7px;
       font-weight: 850;
+      opacity: 0.96;
+      letter-spacing: -0.1px;
+    }
+
+    .meta{
+      font-size: 12.5px;
+      margin-top: 6px;
+      color: var(--muted);
+    }
+
+    .divider{
+      height: 10px;
+    }
+
+    .tracks{
+      margin-top: 10px;
+      display:flex;
+      flex-direction:column;
+      min-height:0;
+      flex: 1 1 auto;
+    }
+
+    .tracks h2{
+      font-size: 12.5px;
+      margin: 0 0 6px 0;
+      font-weight: 900;
+      letter-spacing: 0.7px;
+      text-transform: uppercase;
+      color: var(--muted);
+      opacity: 0.9;
+    }
+
+    .tracks-box{
+      border: 1px solid var(--border);
+      border-radius:12px;
+      padding: 8px 10px;
+      background: rgba(255,255,255,0.50);
+      overflow: auto;
+      max-height: 300px;
+      transition: background 0.7s ease, border-color 0.7s ease;
+    }
+
+    .side{
+      margin: 9px 0 6px 0;
+      font-size: 11.5px;
+      font-weight: 950;
+      letter-spacing: 0.9px;
+      text-transform: uppercase;
+      opacity: 0.62;
+    }
+
+    .tracks-box ol{ margin: 0; padding-left: 18px; }
+    .tracks-box li{
+      font-size: 13px;
+      margin: 6px 0;
+      line-height: 1.15;
+    }
+    .pos{
+      font-weight: 950;
+      margin-right: 6px;
       opacity: 0.95;
     }
-
-    .meta {
-      font-size: 13px;
-      margin-top: 6px;
-      color: var(--muted);
-    }
-
-    .tracks { margin-top: 10px; }
-    .tracks h2 {
-      font-size: 13px;
-      margin: 0 0 6px 0;
-      font-weight: 850;
-      color: var(--muted);
-    }
-
-    .tracks-box {
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 8px 10px;
-      background: rgba(255,255,255,0.55);
-      max-height: 300px;
-      overflow: auto;
-    }
-
-    .side {
-      margin: 8px 0 6px 0;
+    .dur{
+      opacity: 0.65;
+      margin-left: 6px;
       font-size: 12px;
-      font-weight: 900;
-      letter-spacing: 0.6px;
-      opacity: 0.7;
-      text-transform: uppercase;
     }
 
-    .tracks-box ol { margin: 0; padding-left: 18px; }
-    .tracks-box li { font-size: 13px; margin: 5px 0; }
-    .pos { font-weight: 900; margin-right: 6px; }
-    .dur { opacity: 0.7; margin-left: 6px; }
+    /* Footer */
+    .footer{
+      height: 22px;
+      display:flex;
+      align-items:flex-end;
+      justify-content:center;
+      font-size: 12px;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      opacity: 0.75;
+      user-select:none;
+    }
   </style>
 </head>
 
 <body>
-  <h1>Vinyl Scanner</h1>
-  <div id="status">Ready for scan…</div>
+  <div class="frame">
+    <div class="content">
+      <div class="platter">
+        <img id="cover" alt="Cover"/>
+        <div class="label-ring"></div>
+      </div>
 
-  <div class="card">
-    <div class="platter">
-      <img id="cover" alt="Cover"/>
-      <div class="label-ring"></div>
-    </div>
+      <div class="right">
+        <div id="title" class="fade"></div>
+        <div id="artist" class="fade"></div>
+        <div id="year" class="meta fade"></div>
+        <div id="label" class="meta fade"></div>
 
-    <div class="right">
-      <div id="title"></div>
-      <div id="artist"></div>
-      <div id="year" class="meta"></div>
-      <div id="label" class="meta"></div>
-
-      <div class="tracks">
-        <h2>Track listing</h2>
-        <div id="tracks" class="tracks-box">
-          <div style="opacity:.6;">Scan a record to show tracks</div>
+        <div class="tracks">
+          <h2 class="fade">Track listing</h2>
+          <div id="tracks" class="tracks-box fade">
+            <div style="opacity:.6;">Scan a record to show tracks</div>
+          </div>
         </div>
       </div>
     </div>
+
+    <div class="footer">Now Spinning</div>
   </div>
 
 <script>
@@ -195,18 +287,56 @@
   let lastKeyTime = 0;
   let submitTimer = null;
 
-  function clearDisplay() {
+  function clearReveal() {
+    // Cover: hide + stop
+    const cover = $("cover");
+    cover.classList.remove("show");
+    cover.style.animationPlayState = "paused";
+
+    // Panel pieces: hide
+    const fades = document.querySelectorAll(".fade");
+    for (const el of fades) el.classList.remove("show");
+  }
+
+  function clearDisplay(keepStatus) {
     $("title").textContent = "";
     $("artist").textContent = "";
     $("year").textContent = "";
     $("label").textContent = "";
     $("cover").src = "";
     $("tracks").innerHTML = "<div style='opacity:.6;'>Scan a record to show tracks</div>";
-    $("status").textContent = "Ready for scan…";
-    $("cover").style.animationPlayState = "paused";
+    if (!keepStatus) $("status").textContent = "Ready for scan…";
 
+    // Reset theme to neutral
     document.documentElement.style.setProperty("--wash", "rgba(0,0,0,0)");
+    document.documentElement.style.setProperty("--wash2", "rgba(0,0,0,0)");
     document.documentElement.style.setProperty("--title", "var(--fg)");
+  }
+
+  function stageReveal() {
+    // Apple TV style sequencing
+    // 1) cover appears
+    // 2) title/artist
+    // 3) meta
+    // 4) tracklist title + box
+    const cover = $("cover");
+    cover.classList.add("show");
+
+    const steps = [
+      { sel: "#title", ms: 90 },
+      { sel: "#artist", ms: 140 },
+      { sel: "#year", ms: 190 },
+      { sel: "#label", ms: 230 },
+      { sel: ".tracks h2", ms: 270 },
+      { sel: "#tracks", ms: 310 }
+    ];
+
+    for (const s of steps) {
+      setTimeout(() => {
+        const el = document.querySelector(s.sel);
+        if (el) el.classList.add("show");
+      }, s.ms);
+    }
   }
 
   function sideFromPosition(pos) {
@@ -225,29 +355,31 @@
 
     for (const t of tracklist) {
       const side = sideFromPosition(t.position);
-      if (!groups[side]) { groups[side] = []; order.push(side); }
-      groups[side].push(t);
+      const key = side || "";
+      if (!groups[key]) { groups[key] = []; order.push(key); }
+      groups[key].push(t);
     }
 
     let html = "";
     for (const side of order) {
       if (side) html += `<div class="side">Side ${side}</div>`;
-      html += "<ol>" + groups[side].map(t =>
-        `<li><span class="pos">${t.position || ""}</span>${t.title || ""}${t.duration ? ` <span class="dur">(${t.duration})</span>` : ""}</li>`
-      ).join("") + "</ol>";
+      html += "<ol>" + groups[side].map(t => {
+        const pos = t.position ? `<span class="pos">${t.position}</span>` : "";
+        const dur = t.duration ? ` <span class="dur">(${t.duration})</span>` : "";
+        return `<li>${pos}${t.title || ""}${dur}</li>`;
+      }).join("") + "</ol>";
     }
 
     $("tracks").innerHTML = html;
   }
 
-  /* ---- THEME EXTRACTION FROM ARTWORK ---- */
   function applyThemeFromCover(img) {
     try {
       const c = document.createElement("canvas");
       const ctx = c.getContext("2d", { willReadFrequently: true });
-      c.width = c.height = 48;
-      ctx.drawImage(img, 0, 0, 48, 48);
-      const d = ctx.getImageData(0, 0, 48, 48).data;
+      c.width = c.height = 56;
+      ctx.drawImage(img, 0, 0, 56, 56);
+      const d = ctx.getImageData(0, 0, 56, 56).data;
 
       let r=0,g=0,b=0,l=0,n=0;
 
@@ -265,68 +397,100 @@
       if (!n) return;
 
       r=Math.round(r/n); g=Math.round(g/n); b=Math.round(b/n);
-      const avg=(r+g+b)/3, boost=1.2;
-      r=Math.min(255,avg+(r-avg)*boost);
-      g=Math.min(255,avg+(g-avg)*boost);
-      b=Math.min(255,avg+(b-avg)*boost);
+
+      // Saturation lift (polish)
+      const avg=(r+g+b)/3, boost=1.22;
+      r=Math.min(255, Math.max(0, Math.round(avg+(r-avg)*boost)));
+      g=Math.min(255, Math.max(0, Math.round(avg+(g-avg)*boost)));
+      b=Math.min(255, Math.max(0, Math.round(avg+(b-avg)*boost)));
 
       document.documentElement.style.setProperty("--title", `rgb(${r},${g},${b})`);
-      document.documentElement.style.setProperty("--wash", `rgba(${r},${g},${b},0.16)`);
+
+      // Wash refinement: a strong + a lighter layer
+      document.documentElement.style.setProperty("--wash",  `rgba(${r},${g},${b},0.18)`);
+      document.documentElement.style.setProperty("--wash2", `rgba(${r},${g},${b},0.10)`);
 
       const dark = (l/n) < 110;
+
       document.documentElement.style.setProperty("--bg", dark ? "#0f1115" : "#ffffff");
       document.documentElement.style.setProperty("--fg", dark ? "#f0f2f5" : "#111111");
-      document.documentElement.style.setProperty("--panel", dark ? "rgba(20,22,28,0.84)" : "rgba(255,255,255,0.88)");
+      document.documentElement.style.setProperty("--panel", dark ? "rgba(20,22,28,0.82)" : "rgba(255,255,255,0.86)");
       document.documentElement.style.setProperty("--border", dark ? "rgba(240,242,245,0.14)" : "rgba(0,0,0,0.14)");
-      document.documentElement.style.setProperty("--muted", dark ? "rgba(240,242,245,0.7)" : "rgba(0,0,0,0.7)");
+      document.documentElement.style.setProperty("--muted", dark ? "rgba(240,242,245,0.72)" : "rgba(0,0,0,0.70)");
+      document.documentElement.style.setProperty("--shadow", dark ? "rgba(0,0,0,0.44)" : "rgba(0,0,0,0.16)");
+      document.documentElement.style.setProperty("--shadow2", dark ? "rgba(0,0,0,0.26)" : "rgba(0,0,0,0.08)");
     } catch {}
   }
 
   async function lookup(code) {
+    if (!code || code.length < 10) return;
+
     $("status").textContent = "Looking up…";
-    clearDisplay();
+    clearReveal();
+    clearDisplay(true);
 
     const res = await fetch(`/api/lookup?barcode=${code}`);
     const data = await res.json();
-    if (!res.ok) return $("status").textContent="Error — ready for scan…";
+    if (!res.ok) {
+      $("status").textContent = "Error — ready for scan…";
+      return;
+    }
 
+    // Fill content first (so animations reveal real content)
     $("title").textContent = data.title || "";
     $("artist").textContent = (data.artists||[]).join(" • ");
     $("year").textContent = data.year ? `Year: ${data.year}` : "";
     $("label").textContent = (data.labels||[]).length ? `Label: ${data.labels[0]}` : "";
+    renderTracksGrouped(data.tracklist);
 
+    // Cover load triggers theme + spin + staged reveals
     if (data.cover) {
       const img = $("cover");
       img.onload = () => {
         applyThemeFromCover(img);
         img.style.animationPlayState = "running";
+        stageReveal();
       };
       img.src = data.cover;
+    } else {
+      stageReveal();
     }
 
-    renderTracksGrouped(data.tracklist);
-    $("status").textContent = "Loaded — ready for scan…";
+    $("status").textContent = data.cached ? "Loaded (cached) — ready for scan…" : "Loaded — ready for scan…";
   }
 
   function scheduleSubmit() {
     clearTimeout(submitTimer);
-    submitTimer=setTimeout(()=>{
-      const c=buffer.replace(/\D/g,"");
-      buffer="";
-      if(c.length>=10) lookup(c);
-    },SUBMIT_AFTER_MS);
+    submitTimer = setTimeout(() => {
+      const c = buffer.replace(/\D/g,"");
+      buffer = "";
+      if (c.length >= 10) lookup(c);
+    }, SUBMIT_AFTER_MS);
   }
 
-  window.addEventListener("keydown",e=>{
-    if(e.ctrlKey||e.metaKey||e.altKey)return;
-    const now=Date.now();
-    if(now-lastKeyTime>GAP_RESET_MS)buffer="";
-    lastKeyTime=now;
-    if(e.key==="Enter")return lookup(buffer.replace(/\D/g,""));
-    if(/[0-9]/.test(e.key)){buffer+=e.key; scheduleSubmit();}
-  });
+  window.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
 
-  clearDisplay();
+    const now = Date.now();
+    if (now - lastKeyTime > GAP_RESET_MS) buffer = "";
+    lastKeyTime = now;
+
+    if (e.key === "Enter") {
+      const c = buffer.replace(/\D/g,"");
+      buffer = "";
+      if (c.length >= 10) lookup(c);
+      return;
+    }
+
+    if (/[0-9]/.test(e.key)) {
+      buffer += e.key;
+      scheduleSubmit();
+    }
+  }, true);
+
+  // initial state
+  clearReveal();
+  clearDisplay(false);
 </script>
 
 </body>
