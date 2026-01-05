@@ -30,15 +30,72 @@
 
     .card { display: flex; gap: 12px; align-items: flex-start; }
 
-    #cover {
+    /* ---------- RECORD PLAYER VISUAL ---------- */
+
+    .platter {
+      position: relative;
       width: 392px;
       height: 392px;
+      border-radius: 50%;
+      flex: 0 0 auto;
+    }
+
+    /* soft platter shadow */
+    .platter::before {
+      content: "";
+      position: absolute;
+      inset: -10px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at center,
+          rgba(0,0,0,0.10) 0%,
+          rgba(0,0,0,0.06) 45%,
+          rgba(0,0,0,0.02) 60%,
+          rgba(0,0,0,0.00) 72%);
+      filter: blur(6px);
+      z-index: 0;
+    }
+
+    /* rotating record */
+    #cover {
+      position: relative;
+      z-index: 1;
+      width: 392px;
+      height: 392px;
+      border-radius: 50%; /* key vinyl cue */
       object-fit: cover;
       background: #eee;
-      border-radius: 12px;
-      flex: 0 0 auto;
-      box-shadow: 0 8px 26px rgba(0,0,0,0.15);
+      box-shadow: 0 10px 26px rgba(0,0,0,0.18);
+      animation: spin 28s linear infinite;
+      animation-play-state: paused; /* start idle */
     }
+
+    /* subtle centre label ring */
+    .label-ring {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 96px;
+      height: 96px;
+      margin-left: -48px;
+      margin-top: -48px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at center,
+          rgba(255,255,255,0.00) 0%,
+          rgba(255,255,255,0.00) 58%,
+          rgba(255,255,255,0.25) 60%,
+          rgba(255,255,255,0.00) 66%);
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+
+    /* ---------- INFO PANEL ---------- */
 
     .right {
       width: 372px;
@@ -55,6 +112,7 @@
       font-size: 22px;
       font-weight: 850;
       line-height: 1.1;
+      letter-spacing: -0.2px;
       color: var(--title);
       transition: color 0.5s ease;
     }
@@ -78,7 +136,6 @@
       margin: 0 0 6px 0;
       font-weight: 850;
       color: var(--muted);
-      letter-spacing: 0.2px;
     }
 
     .tracks-box {
@@ -88,7 +145,6 @@
       background: rgba(255,255,255,0.55);
       max-height: 300px;
       overflow: auto;
-      transition: background 0.5s ease, border-color 0.5s ease;
     }
 
     .side {
@@ -96,7 +152,7 @@
       font-size: 12px;
       font-weight: 900;
       letter-spacing: 0.6px;
-      opacity: 0.75;
+      opacity: 0.7;
       text-transform: uppercase;
     }
 
@@ -104,9 +160,6 @@
     .tracks-box li { font-size: 13px; margin: 5px 0; }
     .pos { font-weight: 900; margin-right: 6px; }
     .dur { opacity: 0.7; margin-left: 6px; }
-
-    .fade { opacity: 0; transform: translateY(6px); }
-    .fade.show { opacity: 1; transform: translateY(0); transition: opacity 0.35s ease, transform 0.35s ease; }
   </style>
 </head>
 
@@ -115,9 +168,12 @@
   <div id="status">Ready for scan…</div>
 
   <div class="card">
-    <img id="cover" alt="Cover"/>
+    <div class="platter">
+      <img id="cover" alt="Cover"/>
+      <div class="label-ring"></div>
+    </div>
 
-    <div class="right fade" id="panel">
+    <div class="right">
       <div id="title"></div>
       <div id="artist"></div>
       <div id="year" class="meta"></div>
@@ -142,37 +198,25 @@
   let lastKeyTime = 0;
   let submitTimer = null;
 
-  function clearDisplay(keepStatus) {
+  function clearDisplay() {
     $("title").textContent = "";
     $("artist").textContent = "";
     $("year").textContent = "";
     $("label").textContent = "";
     $("cover").src = "";
     $("tracks").innerHTML = "<div style='opacity:.6;'>Scan a record to show tracks</div>";
-    if (!keepStatus) $("status").textContent = "Ready for scan…";
-
-    document.documentElement.style.setProperty("--wash", "rgba(0,0,0,0.00)");
-    document.documentElement.style.setProperty("--title", "var(--fg)");
-  }
-
-  function escapeHtml(str) {
-    return String(str)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
+    $("status").textContent = "Ready for scan…";
+    $("cover").style.animationPlayState = "paused";
   }
 
   function sideFromPosition(pos) {
     const p = String(pos || "").trim().toUpperCase();
-    if (!p) return "";
     const m = p.match(/^([A-Z])/);
     return m ? m[1] : "";
   }
 
   function renderTracksGrouped(tracklist) {
-    if (!Array.isArray(tracklist) || tracklist.length === 0) {
+    if (!Array.isArray(tracklist) || !tracklist.length) {
       $("tracks").innerHTML = "<div style='opacity:.6;'>No track listing found</div>";
       return;
     }
@@ -182,148 +226,59 @@
 
     for (const t of tracklist) {
       const side = sideFromPosition(t.position);
-      const key = side || "";
-      if (!groups[key]) { groups[key] = []; order.push(key); }
-      groups[key].push(t);
+      if (!groups[side]) { groups[side] = []; order.push(side); }
+      groups[side].push(t);
     }
 
     let html = "";
-    for (const key of order) {
-      if (key) html += `<div class="side">Side ${escapeHtml(key)}</div>`;
-
-      const items = groups[key].map(t => {
-        const pos = t.position ? `<span class="pos">${escapeHtml(t.position)}</span>` : "";
-        const title = escapeHtml(t.title || "");
-        const dur = t.duration ? `<span class="dur">(${escapeHtml(t.duration)})</span>` : "";
-        return `<li>${pos}${title}${dur}</li>`;
-      }).join("");
-
-      html += `<ol>${items}</ol>`;
+    for (const side of order) {
+      if (side) html += `<div class="side">Side ${side}</div>`;
+      html += "<ol>" + groups[side].map(t =>
+        `<li><span class="pos">${t.position || ""}</span>${t.title || ""}${t.duration ? ` <span class="dur">(${t.duration})</span>` : ""}</li>`
+      ).join("") + "</ol>";
     }
 
     $("tracks").innerHTML = html;
   }
 
-  function applyThemeFromCover(imgEl) {
-    try {
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-
-      const size = 48;
-      canvas.width = size;
-      canvas.height = size;
-
-      ctx.drawImage(imgEl, 0, 0, size, size);
-      const data = ctx.getImageData(0, 0, size, size).data;
-
-      let rSum = 0, gSum = 0, bSum = 0, count = 0;
-      let lumSum = 0;
-
-      for (let i = 0; i < data.length; i += 4) {
-        const a = data[i + 3];
-        if (a < 200) continue;
-
-        const r = data[i], g = data[i + 1], b = data[i + 2];
-        const max = Math.max(r, g, b);
-        const min = Math.min(r, g, b);
-
-        if (max > 245 && min > 245) continue;
-        if (max < 18 && min < 18) continue;
-
-        rSum += r; gSum += g; bSum += b; count++;
-        lumSum += (0.2126 * r + 0.7152 * g + 0.0722 * b);
-      }
-
-      if (!count) return;
-
-      let r = Math.round(rSum / count);
-      let g = Math.round(gSum / count);
-      let b = Math.round(bSum / count);
-
-      const avg = Math.round((r + g + b) / 3);
-      const satBoost = 1.20;
-      r = Math.min(255, Math.max(0, Math.round(avg + (r - avg) * satBoost)));
-      g = Math.min(255, Math.max(0, Math.round(avg + (g - avg) * satBoost)));
-      b = Math.min(255, Math.max(0, Math.round(avg + (b - avg) * satBoost)));
-
-      document.documentElement.style.setProperty("--title", `rgb(${r}, ${g}, ${b})`);
-      document.documentElement.style.setProperty("--wash", `rgba(${r}, ${g}, ${b}, 0.16)`);
-
-      const avgLum = lumSum / count;
-      const isDarkCover = avgLum < 110;
-
-      if (isDarkCover) {
-        document.documentElement.style.setProperty("--bg", "#0f1115");
-        document.documentElement.style.setProperty("--fg", "#f0f2f5");
-        document.documentElement.style.setProperty("--muted", "rgba(240,242,245,0.70)");
-        document.documentElement.style.setProperty("--panel", "rgba(20,22,28,0.84)");
-        document.documentElement.style.setProperty("--border", "rgba(240,242,245,0.14)");
-      } else {
-        document.documentElement.style.setProperty("--bg", "#ffffff");
-        document.documentElement.style.setProperty("--fg", "#111111");
-        document.documentElement.style.setProperty("--muted", "rgba(0,0,0,0.70)");
-        document.documentElement.style.setProperty("--panel", "rgba(255,255,255,0.88)");
-        document.documentElement.style.setProperty("--border", "rgba(0,0,0,0.14)");
-      }
-    } catch {
-      // If anything goes wrong, just skip theming
-    }
-  }
-
-  function showPanelFade() {
-    const panel = $("panel");
-    panel.classList.remove("show");
-    void panel.offsetWidth;
-    panel.classList.add("show");
-  }
-
   async function lookup(barcode) {
-    if (!barcode || barcode.length < 10) {
-      $("status").textContent = "Scan error — ready for scan…";
+    $("status").textContent = "Looking up…";
+    clearDisplay();
+
+    const res = await fetch(`/api/lookup?barcode=${barcode}`);
+    const data = await res.json();
+    if (!res.ok) {
+      $("status").textContent = "Error — ready for scan…";
       return;
     }
 
-    $("status").textContent = "Looking up…";
-    clearDisplay(true);
-    showPanelFade();
+    $("title").textContent = data.title || "";
+    $("artist").textContent = (data.artists || []).join(" • ");
+    $("year").textContent = data.year ? `Year: ${data.year}` : "";
+    $("label").textContent = (data.labels || []).length ? `Label: ${data.labels[0]}` : "";
 
-    try {
-      const res = await fetch(`/api/lookup?barcode=${encodeURIComponent(barcode)}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Lookup failed");
-
-      $("status").textContent = data.cached ? "Loaded (cached) — ready for scan…" : "Loaded — ready for scan…";
-      $("title").textContent = data.title || "";
-      $("artist").textContent = (data.artists || []).join(" • ");
-      $("year").textContent = data.year ? `Year: ${data.year}` : "";
-      $("label").textContent = (data.labels && data.labels.length) ? `Label: ${data.labels[0]}` : "";
-
-      if (data.cover) {
-        const img = $("cover");
-        img.onload = () => {
-          applyThemeFromCover(img);
-          showPanelFade();
-        };
-        img.src = data.cover;
-      }
-
-      renderTracksGrouped(data.tracklist);
-      showPanelFade();
-    } catch (e) {
-      $("status").textContent = "Error — ready for scan…";
+    if (data.cover) {
+      const img = $("cover");
+      img.onload = () => {
+        img.style.animationPlayState = "running"; // start spinning
+      };
+      img.src = data.cover;
     }
+
+    renderTracksGrouped(data.tracklist);
+    $("status").textContent = "Loaded — ready for scan…";
   }
 
   function scheduleSubmit() {
     if (submitTimer) clearTimeout(submitTimer);
     submitTimer = setTimeout(() => {
-      const barcode = buffer.replace(/\D/g, "");
+      const code = buffer.replace(/\D/g, "");
       buffer = "";
-      if (barcode.length >= 10) lookup(barcode);
+      if (code.length >= 10) lookup(code);
     }, SUBMIT_AFTER_MS);
   }
 
-  function onAnyKey(e) {
+  window.addEventListener("keydown", (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
 
     const now = Date.now();
@@ -331,22 +286,19 @@
     lastKeyTime = now;
 
     if (e.key === "Enter") {
-      const barcode = buffer.replace(/\D/g, "");
+      const code = buffer.replace(/\D/g, "");
       buffer = "";
-      if (barcode.length >= 10) lookup(barcode);
+      if (code.length >= 10) lookup(code);
       return;
     }
 
-    if (e.key.length === 1 && /[0-9]/.test(e.key)) {
+    if (/[0-9]/.test(e.key)) {
       buffer += e.key;
       scheduleSubmit();
     }
-  }
+  });
 
-  window.addEventListener("keydown", onAnyKey, true);
-
-  $("panel").classList.add("show");
-  clearDisplay(false);
+  clearDisplay();
 </script>
 
 </body>
