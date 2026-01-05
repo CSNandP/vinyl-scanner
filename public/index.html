@@ -26,20 +26,10 @@
     }
 
     h1 { margin: 0 0 6px 0; font-size: 18px; opacity: 0.9; }
+    #status { font-size: 13px; margin: 4px 0 8px 0; color: var(--muted); }
 
-    #status {
-      font-size: 13px;
-      margin: 4px 0 8px 0;
-      color: var(--muted);
-    }
+    .card { display: flex; gap: 12px; align-items: flex-start; }
 
-    .card {
-      display: flex;
-      gap: 12px;
-      align-items: flex-start;
-    }
-
-    /* Big cover left */
     #cover {
       width: 392px;
       height: 392px;
@@ -56,7 +46,7 @@
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 10px 10px;
+      padding: 10px;
       box-shadow: 0 8px 26px rgba(0,0,0,0.06);
       transition: background 0.5s ease, border-color 0.5s ease;
     }
@@ -72,7 +62,7 @@
     #artist {
       font-size: 14px;
       margin-top: 6px;
-      font-weight: 850; /* bold artist */
+      font-weight: 850;
       opacity: 0.95;
     }
 
@@ -91,7 +81,6 @@
       letter-spacing: 0.2px;
     }
 
-    /* Deeper/taller track area; narrow because right column is narrow */
     .tracks-box {
       border: 1px solid var(--border);
       border-radius: 12px;
@@ -116,16 +105,8 @@
     .pos { font-weight: 900; margin-right: 6px; }
     .dur { opacity: 0.7; margin-left: 6px; }
 
-    /* Fade-in animation for new results */
-    .fade {
-      opacity: 0;
-      transform: translateY(6px);
-    }
-    .fade.show {
-      opacity: 1;
-      transform: translateY(0);
-      transition: opacity 0.35s ease, transform 0.35s ease;
-    }
+    .fade { opacity: 0; transform: translateY(6px); }
+    .fade.show { opacity: 1; transform: translateY(0); transition: opacity 0.35s ease, transform 0.35s ease; }
   </style>
 </head>
 
@@ -134,7 +115,7 @@
   <div id="status">Ready for scan…</div>
 
   <div class="card">
-    <img id="cover" alt="Cover" crossorigin="anonymous"/>
+    <img id="cover" alt="Cover"/>
 
     <div class="right fade" id="panel">
       <div id="title"></div>
@@ -154,22 +135,12 @@
 <script>
   const $ = (id) => document.getElementById(id);
 
-  // Touch-free scanner buffering
   const GAP_RESET_MS = 250;
   const SUBMIT_AFTER_MS = 180;
 
   let buffer = "";
   let lastKeyTime = 0;
   let submitTimer = null;
-
-  function escapeHtml(str) {
-    return String(str)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
 
   function clearDisplay(keepStatus) {
     $("title").textContent = "";
@@ -180,16 +151,22 @@
     $("tracks").innerHTML = "<div style='opacity:.6;'>Scan a record to show tracks</div>";
     if (!keepStatus) $("status").textContent = "Ready for scan…";
 
-    // Reset theme to neutral
     document.documentElement.style.setProperty("--wash", "rgba(0,0,0,0.00)");
     document.documentElement.style.setProperty("--title", "var(--fg)");
   }
 
-  // --- Track grouping by side (A/B/C/D etc.) ---
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
   function sideFromPosition(pos) {
     const p = String(pos || "").trim().toUpperCase();
     if (!p) return "";
-    // Typical vinyl: A1, B2, C1... or A, B etc.
     const m = p.match(/^([A-Z])/);
     return m ? m[1] : "";
   }
@@ -200,26 +177,19 @@
       return;
     }
 
-    // Group by side letter
-    const groups = {};   // {A: [...], B: [...], "": [...]}
+    const groups = {};
     const order = [];
 
     for (const t of tracklist) {
       const side = sideFromPosition(t.position);
-      const key = side || ""; // unknown side
-      if (!groups[key]) {
-        groups[key] = [];
-        order.push(key);
-      }
+      const key = side || "";
+      if (!groups[key]) { groups[key] = []; order.push(key); }
       groups[key].push(t);
     }
 
-    // Render groups in the order they appeared
     let html = "";
     for (const key of order) {
-      if (key) {
-        html += `<div class="side">Side ${escapeHtml(key)}</div>`;
-      }
+      if (key) html += `<div class="side">Side ${escapeHtml(key)}</div>`;
 
       const items = groups[key].map(t => {
         const pos = t.position ? `<span class="pos">${escapeHtml(t.position)}</span>` : "";
@@ -234,7 +204,6 @@
     $("tracks").innerHTML = html;
   }
 
-  // --- Colour + brightness extraction from cover (for title + theme wash) ---
   function applyThemeFromCover(imgEl) {
     try {
       const canvas = document.createElement("canvas");
@@ -255,18 +224,14 @@
         if (a < 200) continue;
 
         const r = data[i], g = data[i + 1], b = data[i + 2];
-
-        // Ignore near-white and near-black pixels (often background/borders)
         const max = Math.max(r, g, b);
         const min = Math.min(r, g, b);
+
         if (max > 245 && min > 245) continue;
         if (max < 18 && min < 18) continue;
 
         rSum += r; gSum += g; bSum += b; count++;
-
-        // Relative luminance
-        const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        lumSum += lum;
+        lumSum += (0.2126 * r + 0.7152 * g + 0.0722 * b);
       }
 
       if (!count) return;
@@ -275,21 +240,16 @@
       let g = Math.round(gSum / count);
       let b = Math.round(bSum / count);
 
-      // Boost saturation a touch by pushing away from grey
       const avg = Math.round((r + g + b) / 3);
       const satBoost = 1.20;
       r = Math.min(255, Math.max(0, Math.round(avg + (r - avg) * satBoost)));
       g = Math.min(255, Math.max(0, Math.round(avg + (g - avg) * satBoost)));
       b = Math.min(255, Math.max(0, Math.round(avg + (b - avg) * satBoost)));
 
-      // Title colour (from artwork)
       document.documentElement.style.setProperty("--title", `rgb(${r}, ${g}, ${b})`);
-
-      // Background wash (very subtle)
       document.documentElement.style.setProperty("--wash", `rgba(${r}, ${g}, ${b}, 0.16)`);
 
-      // Dark/light mode based on brightness of sampled pixels
-      const avgLum = lumSum / count; // 0-255
+      const avgLum = lumSum / count;
       const isDarkCover = avgLum < 110;
 
       if (isDarkCover) {
@@ -306,14 +266,13 @@
         document.documentElement.style.setProperty("--border", "rgba(0,0,0,0.14)");
       }
     } catch {
-      // If canvas is blocked for any reason, we simply don't theme it
+      // If anything goes wrong, just skip theming
     }
   }
 
   function showPanelFade() {
     const panel = $("panel");
     panel.classList.remove("show");
-    // force reflow
     void panel.offsetWidth;
     panel.classList.add("show");
   }
@@ -343,7 +302,7 @@
         const img = $("cover");
         img.onload = () => {
           applyThemeFromCover(img);
-          showPanelFade(); // gentle refresh once colours apply
+          showPanelFade();
         };
         img.src = data.cover;
       }
@@ -386,7 +345,6 @@
 
   window.addEventListener("keydown", onAnyKey, true);
 
-  // start with neutral state + fade container ready
   $("panel").classList.add("show");
   clearDisplay(false);
 </script>
