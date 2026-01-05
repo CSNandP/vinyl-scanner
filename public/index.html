@@ -6,44 +6,72 @@
   <title>Vinyl Scanner</title>
 
   <style>
-    body { font-family: system-ui, sans-serif; margin: 0; padding: 14px; }
-    h1 { margin: 0 0 8px 0; font-size: 22px; }
-    #status { font-size: 16px; margin: 6px 0 10px 0; opacity: 0.9; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 12px; }
+    h1 { margin: 0 0 6px 0; font-size: 20px; }
+    #status { font-size: 14px; margin: 4px 0 8px 0; opacity: 0.9; }
 
-    .card { display: flex; gap: 14px; align-items: flex-start; }
+    /* Layout tuned for 800x480: big cover left, narrow/tall info right */
+    .card {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    /* BIGGER cover art on the left */
     #cover {
-      width: 320px;
-      height: 320px;
+      width: 392px;   /* up from ~320 */
+      height: 392px;  /* keeps square */
       object-fit: cover;
       background: #eee;
       border-radius: 12px;
+      flex: 0 0 auto;
     }
 
-    #title { font-size: 26px; font-weight: 800; line-height: 1.1; }
-    .meta { font-size: 16px; margin-top: 6px; opacity: 0.95; }
+    /* Right column intentionally narrow to give cover more room */
+    .right {
+      width: 372px;          /* 800 - padding/gap/cover ~= right column width */
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    #title {
+      font-size: 22px;       /* slightly smaller to fit narrow column */
+      font-weight: 800;
+      line-height: 1.1;
+    }
+
+    .meta {
+      font-size: 14px;
+      margin-top: 6px;
+      opacity: 0.95;
+    }
 
     .tracks { margin-top: 10px; }
-    .tracks h2 { font-size: 16px; margin: 0 0 6px 0; font-weight: 800; }
+    .tracks h2 { font-size: 14px; margin: 0 0 6px 0; font-weight: 800; }
 
+    /* Deeper (taller) track box, but narrower because right column is narrower */
     .tracks-box {
       border: 1px solid #ddd;
       border-radius: 12px;
       padding: 8px 10px;
       background: #fafafa;
-      max-height: 190px;
+
+      max-height: 300px;  /* deeper than before */
       overflow: auto;
     }
-    .tracks-box ol { margin: 0; padding-left: 20px; }
-    .tracks-box li { font-size: 14px; margin: 5px 0; }
+
+    .tracks-box ol { margin: 0; padding-left: 18px; }
+    .tracks-box li { font-size: 13px; margin: 5px 0; }
     .pos { font-weight: 800; margin-right: 6px; }
     .dur { opacity: 0.7; margin-left: 6px; }
 
-    /* Tiny debug line (helps confirm scans are being captured) */
+    /* Tiny debug line (optional; helps confirm scans). Set display:none if you want it gone. */
     #debug {
-      font-size: 12px;
-      opacity: 0.55;
+      font-size: 11px;
+      opacity: 0.5;
       margin-top: 6px;
       user-select: none;
+      display: none;
     }
   </style>
 </head>
@@ -55,7 +83,7 @@
   <div class="card">
     <img id="cover" alt="Cover"/>
 
-    <div style="flex:1;">
+    <div class="right">
       <div id="title"></div>
       <div id="artist" class="meta"></div>
       <div id="year" class="meta"></div>
@@ -79,10 +107,8 @@
   const AUTO_CLEAR_MS = 0;
 
   // Scanner “typing speed” tuning:
-  // - if gap between keys is > 250ms, we treat it as a new scan starting
-  // - we auto-submit 180ms after last digit
-  const GAP_RESET_MS = 250;
-  const SUBMIT_AFTER_MS = 180;
+  const GAP_RESET_MS = 250;   // gap between keys that resets scan buffer
+  const SUBMIT_AFTER_MS = 180; // submit after last digit
 
   let buffer = "";
   let lastKeyTime = 0;
@@ -146,6 +172,7 @@
       $("year").textContent = data.year ? `Year: ${data.year}` : "";
       $("label").textContent = (data.labels && data.labels.length) ? `Label: ${data.labels[0]}` : "";
       if (data.cover) $("cover").src = data.cover;
+
       renderTracks(data.tracklist);
 
       if (AUTO_CLEAR_MS > 0) {
@@ -167,17 +194,13 @@
   }
 
   function onAnyKey(e) {
-    // ignore modifier combos
     if (e.ctrlKey || e.metaKey || e.altKey) return;
 
     const now = Date.now();
-
-    // If there was a gap, start a fresh buffer
     if (now - lastKeyTime > GAP_RESET_MS) buffer = "";
     lastKeyTime = now;
 
     if (e.key === "Enter") {
-      // Some scanners send Enter: submit immediately
       const barcode = buffer.replace(/\D/g, "");
       buffer = "";
       $("debug").textContent = "";
@@ -185,7 +208,6 @@
       return;
     }
 
-    // accept digits only
     if (e.key.length === 1 && /[0-9]/.test(e.key)) {
       buffer += e.key;
       $("debug").textContent = "Scan captured: " + buffer;
@@ -193,10 +215,8 @@
     }
   }
 
-  // Capture keystrokes anywhere (touch-free)
   window.addEventListener("keydown", onAnyKey, true);
 
-  // Start ready
   clearDisplay(false);
 </script>
 
