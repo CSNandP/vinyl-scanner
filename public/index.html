@@ -27,7 +27,7 @@
       color: var(--fg);
       background:
         radial-gradient(520px 520px at 210px 210px, var(--wash), rgba(0,0,0,0) 70%),
-        radial-gradient(620px 620px at 240px 240px, var(--wash2), rgba(0,0,0,0) 76%),
+        radial-gradient(680px 680px at 260px 250px, var(--wash2), rgba(0,0,0,0) 76%),
         linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0) 52%, rgba(0,0,0,0.02) 100%),
         var(--bg);
       transition: background 0.7s ease, color 0.7s ease;
@@ -181,7 +181,7 @@
 
     .content{
       display:flex;
-      gap:12px;
+      gap:14px;
       align-items:flex-start;
       flex: 1 1 auto;
       min-height: 0;
@@ -252,95 +252,112 @@
 
     @keyframes spin{ from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
 
-    /* ---------- INFO PANEL ---------- */
-    .right{
+    /* ---------- RIGHT SIDE: album header + quote hero ---------- */
+    .rightSide{
       width:372px;
       min-width:0;
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius:12px;
-      padding:12px;
-      box-shadow: 0 10px 26px var(--shadow2);
-      transition: background 0.7s ease, border-color 0.7s ease, box-shadow 0.7s ease;
+      height:392px;
       display:flex;
       flex-direction:column;
-      min-height: 392px;
-      height: 392px;
-      box-sizing: border-box;
+      justify-content:space-between;
+      padding: 2px 2px 2px 2px;
+      box-sizing:border-box;
+    }
+
+    /* Album info becomes a small “header band” */
+    .albumHeader{
+      background: rgba(255,255,255,0.00);
+      padding: 6px 2px 8px 2px;
     }
 
     .fade{ opacity:0; transform: translateY(6px); will-change: transform, opacity; }
     .fade.show{ opacity:1; transform: translateY(0); transition: opacity 0.35s ease, transform 0.35s ease; }
 
     #title{
-      font-size: 23px;
-      font-weight: 860;
-      line-height: 1.08;
-      letter-spacing: -0.3px;
+      font-size: 22px;
+      font-weight: 900;
+      line-height: 1.06;
+      letter-spacing: -0.4px;
       color: var(--title);
       transition: color 0.7s ease;
-      margin-top: 1px;
     }
 
     #artist{
       font-size: 15px;
-      margin-top: 7px;
-      font-weight: 850;
-      opacity: 0.96;
+      margin-top: 8px;
+      font-weight: 900;
+      opacity: 0.95;
       letter-spacing: -0.1px;
     }
 
-    .meta{ font-size: 12.5px; margin-top: 6px; color: var(--muted); }
+    .metaRow{
+      margin-top: 7px;
+      display:flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items:center;
+    }
 
-    /* ---------- QUOTE AREA (unboxed, hero) ---------- */
-    .quoteArea{
-      margin-top: 14px;
+    .metaChip{
+      font-size: 11.5px;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      opacity: 0.74;
+      padding: 2px 0;
+      white-space: nowrap;
+    }
+
+    /* QUOTE HERO AREA */
+    .quoteHero{
       flex: 1 1 auto;
       min-height: 0;
       display:flex;
       flex-direction:column;
-      justify-content:space-between;
-      padding: 8px 2px 4px 2px;
+      justify-content:center;
+      padding: 2px 0 0 0;
     }
 
     .quote{
       position: relative;
-      font-size: 24px;          /* BIGGER */
-      font-weight: 800;
+      font-family: Georgia, "Times New Roman", Times, serif; /* subtle serif for quote */
+      font-style: italic;
+      font-size: 28px;            /* BIG */
+      font-weight: 700;
       line-height: 1.12;
-      letter-spacing: -0.3px;
+      letter-spacing: -0.25px;
       opacity: 0.98;
-      padding: 16px 6px 10px 10px;
-      min-height: 210px;        /* main hero area */
+      padding: 20px 8px 18px 10px;
+      min-height: 230px;
     }
 
-    /* big quote marks */
     .quote::before,
     .quote::after{
       position:absolute;
-      font-size: 62px;
+      font-style: normal;
+      font-size: 78px;
       font-weight: 900;
       line-height: 1;
       color: var(--title);
-      opacity: 0.28;            /* classy, not shouty */
+      opacity: 0.22;
       pointer-events:none;
     }
 
     .quote::before{
       content: "“";
       left: -6px;
-      top: -10px;
+      top: -14px;
     }
     .quote::after{
       content: "”";
       right: -2px;
-      bottom: -26px;
+      bottom: -34px;
     }
 
     .quoteFade{
       opacity: 0;
-      transform: translateY(10px);
-      transition: opacity 0.7s ease, transform 0.7s ease;
+      transform: translateY(12px);
+      transition: opacity 0.75s ease, transform 0.75s ease;
     }
     .quoteFade.show{
       opacity: 1;
@@ -348,15 +365,16 @@
     }
 
     .source{
-      margin-top: 10px;
-      font-size: 12px;
-      letter-spacing: 1.8px;
+      margin-top: 6px;
+      font-size: 11.5px;
+      letter-spacing: 2.0px;
       text-transform: uppercase;
       color: var(--muted);
-      opacity: 0.7;
+      opacity: 0.62;
       display:flex;
       justify-content:flex-end;
       user-select:none;
+      padding-right: 2px;
     }
 
     /* ---------- FOOTER ---------- */
@@ -424,13 +442,17 @@
         <div class="label-ring"></div>
       </div>
 
-      <div class="right">
-        <div id="title" class="fade"></div>
-        <div id="artist" class="fade"></div>
-        <div id="year" class="meta fade"></div>
-        <div id="label" class="meta fade"></div>
+      <div class="rightSide">
+        <div class="albumHeader">
+          <div id="title" class="fade"></div>
+          <div id="artist" class="fade"></div>
+          <div class="metaRow">
+            <div id="year" class="metaChip fade"></div>
+            <div id="label" class="metaChip fade"></div>
+          </div>
+        </div>
 
-        <div class="quoteArea">
+        <div class="quoteHero">
           <div id="quote" class="quote quoteFade">Scan a record to begin.</div>
           <div id="source" class="source">Source —</div>
         </div>
@@ -656,18 +678,17 @@
     $("cover").classList.add("show");
 
     const steps = [
-      { sel: "#title", ms: 90 },
-      { sel: "#artist", ms: 140 },
-      { sel: "#year", ms: 190 },
-      { sel: "#label", ms: 230 },
-      { sel: "#quote", ms: 280 },
-      { sel: "#source", ms: 330 }
+      { el: $("title"), ms: 90 },
+      { el: $("artist"), ms: 140 },
+      { el: $("year"), ms: 200 },
+      { el: $("label"), ms: 240 },
+      { el: $("quote"), ms: 280 },
+      { el: $("source"), ms: 340 }
     ];
 
     for (const s of steps) {
       setTimeout(() => {
-        const el = document.querySelector(s.sel);
-        if (el) el.classList.add("show");
+        if (s.el) s.el.classList.add("show");
       }, s.ms);
     }
   }
@@ -710,8 +731,6 @@
 
       document.documentElement.style.setProperty("--bg", dark ? "#0f1115" : "#ffffff");
       document.documentElement.style.setProperty("--fg", dark ? "#f0f2f5" : "#111111");
-      document.documentElement.style.setProperty("--panel", dark ? "rgba(20,22,28,0.82)" : "rgba(255,255,255,0.86)");
-      document.documentElement.style.setProperty("--border", dark ? "rgba(240,242,245,0.14)" : "rgba(0,0,0,0.14)");
       document.documentElement.style.setProperty("--muted", dark ? "rgba(240,242,245,0.72)" : "rgba(0,0,0,0.70)");
       document.documentElement.style.setProperty("--shadow", dark ? "rgba(0,0,0,0.44)" : "rgba(0,0,0,0.16)");
       document.documentElement.style.setProperty("--shadow2", dark ? "rgba(0,0,0,0.26)" : "rgba(0,0,0,0.08)");
@@ -745,15 +764,14 @@
 
       $("title").textContent = data.title || "";
       $("artist").textContent = (data.artists||[]).join(" • ");
-      $("year").textContent = data.year ? `Year: ${data.year}` : "";
-      $("label").textContent = (data.labels||[]).length ? `Label: ${data.labels[0]}` : "";
+      $("year").textContent = data.year ? `Year ${data.year}` : "";
+      $("label").textContent = (data.labels||[]).length ? `${data.labels[0]}` : "";
 
       factItems = normalizeFacts(data);
       factIndex = 0;
       showFact(0, false);
       startFactRotation();
 
-      // ✅ image load block (theming restored)
       if (data.cover) {
         const img = $("cover");
         img.crossOrigin = "anonymous";
@@ -762,10 +780,8 @@
           img.style.animationPlayState = "running";
           stageReveal();
         };
-        img.onerror = () => {
-          stageReveal();
-        };
-        img.src = data.cover; // should be /api/image?url=...
+        img.onerror = () => stageReveal();
+        img.src = data.cover; // /api/image?url=...
       } else {
         stageReveal();
       }
@@ -782,9 +798,7 @@
       const digits = buffer.replace(/\D/g,"");
       buffer = "";
       if (digits.length >= 10) lookup(digits);
-      else {
-        if (sessionStorage.getItem("started") !== "1") safeStartSplashIdleFonts();
-      }
+      else if (sessionStorage.getItem("started") !== "1") safeStartSplashIdleFonts();
     }, SUBMIT_AFTER_MS);
   }
 
