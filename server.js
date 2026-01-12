@@ -1,4 +1,5 @@
-// server.js — Wiki-style album facts (human, anecdotal)
+// server.js — Discogs for match + cover, Wikipedia/Discogs for human facts (with sources)
+// CommonJS (works with your current package.json)
 
 const express = require("express");
 const path = require("path");
@@ -33,47 +34,72 @@ function uniq(arr) {
 }
 
 function cleanSentence(s) {
-  return s
+  return String(s || "")
     .replace(/\s+/g, " ")
     .replace(/\[[^\]]+\]/g, "") // remove [1] citations
+    .replace(/\u00a0/g, " ")
     .trim();
 }
 
+// Prefer “story” sentences; avoid bland definitional lines
 function looksInteresting(s) {
-  return (
-    s.length > 50 &&
-    s.length < 180 &&
-    !s.match(/may refer to|can refer to|is an album by/i)
-  );
+  const t = cleanSentence(s);
+  if (t.length < 55 || t.length > 200) return false;
+  if (/may refer to|can refer to|may also refer to/i.test(t)) return false;
+  if (/is an album by/i.test(t)) return false;
+  if (/studio album by/i.test(t)) return false;
+  return true;
 }
 
-async function fetchJson(url, headers = {}) {
-  const res = await fetch(url, { headers });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+async function fetchJson(url, headers = {}, timeoutMs = 9000) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { headers, signal: controller.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 // ---------------- Wikipedia facts ----------------
+// Try a couple of likely page titles
 async function fetchWikipediaFacts(artist, album) {
-  const title = `${album} (${artist} album)`;
-  const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
+  const candidates = [
+    `${album} (${artist} album)`,
+    `${album} (album)`,
+    `${album}`, // last resort
+  ];
 
-  try {
-    const data = await fetchJson(url, {
-      "User-Agent": DISCOGS_USER_AGENT,
-      "Accept": "application/json"
-    });
+  for (const title of candidates) {
+    const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
+    try {
+      const data = await fetchJson(url, {
+        "User-Agent": DISCOGS_USER_AGENT,
+        "Accept": "application/json"
+      });
 
-    const text = data.extract || "";
-    const sentences = text.split(/(?<=\.)\s+/);
+      const extract = cleanSentence(data.extract || "");
+      if (!extract) continue;
 
-    return sentences
-      .map(cleanSentence)
-      .filter(looksInteresting)
-      .slice(0, 4);
-  } catch {
-    return [];
+      // Split into sentences
+      const sentences = extract.split(/(?<=\.)\s+/)
+        .map(cleanSentence)
+        .filter(looksInteresting);
+
+      // If the summary is too “definition-y”, still keep a couple but prefer the more narrative ones
+      const picked = sentences.slice(0, 4);
+
+      if (picked.length) {
+        return picked.map((text) => ({ text, source: "Wikipedia" }));
+      }
+    } catch {
+      // try next candidate
+    }
   }
+
+  return [];
 }
 
 // ---------------- Discogs helpers ----------------
@@ -84,7 +110,8 @@ function pickRelease(results = []) {
 async function discogsFetch(url) {
   return fetchJson(url, {
     "User-Agent": DISCOGS_USER_AGENT,
-    ...(DISCOGS_TOKEN ? { "Authorization": `Discogs token=${DISCOGS_TOKEN}` } : {})
+    ...(DISCOGS_TOKEN ? { "Authorization": `Discogs token=${DISCOGS_TOKEN}` } : {}),
+    "Accept": "application/json"
   });
 }
 
@@ -99,21 +126,21 @@ app.get("/api/lookup", async (req, res) => {
     const cached = cacheGet(barcode);
     if (cached) return res.json({ ...cached, cached: true });
 
-    // Discogs search
+    // Discogs search by barcode
     const search = await discogsFetch(
       `https://api.discogs.com/database/search?barcode=${barcode}&type=release&per_page=5`
     );
 
-    const hit = pickRelease(search.results);
+    const hit = pickRelease(search.results || []);
     if (!hit) return res.status(404).json({ error: "No match found" });
 
     const release = await discogsFetch(hit.resource_url);
 
-    const title = release.title;
+    const title = release.title || (hit.title || "");
     const artist =
       Array.isArray(release.artists) && release.artists[0]
         ? release.artists[0].name
-        : "";
+        : (hit.title ? String(hit.title).split(" - ")[0] : "");
 
     const cover =
       release.images?.find(i => i.type === "primary")?.uri ||
@@ -121,38 +148,53 @@ app.get("/api/lookup", async (req, res) => {
       hit.cover_image ||
       "";
 
-    const year = release.year || null;
-    const labels = uniq(release.labels?.map(l => l.name));
+    const year = release.year || hit.year || null;
+    const labels = uniq((release.labels || []).map(l => l.name));
 
-    // -------- Collect facts --------
+    // -------- Facts (quote-style) --------
     let facts = [];
 
-    // Wikipedia first (story-driven)
+    // Wikipedia summary facts first (human story)
     const wikiFacts = await fetchWikipediaFacts(artist, title);
     facts.push(...wikiFacts);
 
-    // Discogs notes (often anecdotal)
+    // Discogs notes can be lovely (collector anecdotes)
     if (release.notes) {
-      const noteSentences = release.notes
+      const noteSentences = String(release.notes)
         .split(/(?<=\.)\s+/)
         .map(cleanSentence)
         .filter(looksInteresting)
-        .slice(0, 2);
+        .slice(0, 2)
+        .map((text) => ({ text, source: "Discogs" }));
 
       facts.push(...noteSentences);
     }
 
-    // Gentle fallback if still sparse
-    if (!facts.length && year) {
-      facts.push(`Released in ${year}, this album marked an important moment in the artist’s career.`);
+    // Gentle fallback (still human-ish), but clearly not “gossip”
+    if (!facts.length) {
+      const fallbackBits = [];
+      if (year) fallbackBits.push(`Released in ${year}.`);
+      if (labels[0]) fallbackBits.push(`Issued on ${labels[0]}.`);
+      if (fallbackBits.length) {
+        facts.push({ text: fallbackBits.join(" "), source: "Discogs" });
+      } else {
+        facts.push({ text: "No extra facts available yet.", source: "Discogs" });
+      }
     }
 
-    facts = uniq(facts).slice(0, 5);
+    // Deduplicate by text
+    const seen = new Set();
+    facts = facts.filter(f => {
+      const k = (f.text || "").toLowerCase();
+      if (!k || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    }).slice(0, 6);
 
     const payload = {
       barcode,
       title,
-      artists: [artist],
+      artists: [artist].filter(Boolean),
       year,
       labels,
       cover,
