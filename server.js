@@ -1,4 +1,4 @@
-// server.js — Discogs for match + cover, Wikipedia/Discogs for human facts (with sources)
+// server.js — Discogs match + cover proxy (for canvas theming) + Wikipedia/Discogs facts with sources
 // CommonJS (works with your current package.json)
 
 const express = require("express");
@@ -28,27 +28,24 @@ function cacheSet(key, data) {
   cache.set(key, { ts: Date.now(), data });
 }
 
-// ---------------- Utilities ----------------
-function uniq(arr) {
-  return [...new Set((arr || []).filter(Boolean))];
-}
-
 function cleanSentence(s) {
   return String(s || "")
     .replace(/\s+/g, " ")
-    .replace(/\[[^\]]+\]/g, "") // remove [1] citations
+    .replace(/\[[^\]]+\]/g, "")
     .replace(/\u00a0/g, " ")
     .trim();
 }
 
-// Prefer “story” sentences; avoid bland definitional lines
 function looksInteresting(s) {
   const t = cleanSentence(s);
   if (t.length < 55 || t.length > 200) return false;
   if (/may refer to|can refer to|may also refer to/i.test(t)) return false;
-  if (/is an album by/i.test(t)) return false;
-  if (/studio album by/i.test(t)) return false;
+  if (/is an album by|studio album by/i.test(t)) return false;
   return true;
+}
+
+function uniq(arr) {
+  return [...new Set((arr || []).filter(Boolean))];
 }
 
 async function fetchJson(url, headers = {}, timeoutMs = 9000) {
@@ -63,13 +60,24 @@ async function fetchJson(url, headers = {}, timeoutMs = 9000) {
   }
 }
 
+async function discogsFetch(url) {
+  return fetchJson(url, {
+    "User-Agent": DISCOGS_USER_AGENT,
+    ...(DISCOGS_TOKEN ? { "Authorization": `Discogs token=${DISCOGS_TOKEN}` } : {}),
+    "Accept": "application/json",
+  });
+}
+
+function pickRelease(results = []) {
+  return results.find((r) => r.type === "release") || results[0] || null;
+}
+
 // ---------------- Wikipedia facts ----------------
-// Try a couple of likely page titles
 async function fetchWikipediaFacts(artist, album) {
   const candidates = [
     `${album} (${artist} album)`,
     `${album} (album)`,
-    `${album}`, // last resort
+    `${album}`,
   ];
 
   for (const title of candidates) {
@@ -77,22 +85,20 @@ async function fetchWikipediaFacts(artist, album) {
     try {
       const data = await fetchJson(url, {
         "User-Agent": DISCOGS_USER_AGENT,
-        "Accept": "application/json"
+        "Accept": "application/json",
       });
 
       const extract = cleanSentence(data.extract || "");
       if (!extract) continue;
 
-      // Split into sentences
-      const sentences = extract.split(/(?<=\.)\s+/)
+      const sentences = extract
+        .split(/(?<=\.)\s+/)
         .map(cleanSentence)
-        .filter(looksInteresting);
+        .filter(looksInteresting)
+        .slice(0, 4);
 
-      // If the summary is too “definition-y”, still keep a couple but prefer the more narrative ones
-      const picked = sentences.slice(0, 4);
-
-      if (picked.length) {
-        return picked.map((text) => ({ text, source: "Wikipedia" }));
+      if (sentences.length) {
+        return sentences.map((text) => ({ text, source: "Wikipedia" }));
       }
     } catch {
       // try next candidate
@@ -102,31 +108,76 @@ async function fetchWikipediaFacts(artist, album) {
   return [];
 }
 
-// ---------------- Discogs helpers ----------------
-function pickRelease(results = []) {
-  return results.find(r => r.type === "release") || results[0] || null;
-}
+// ---------------- Cover proxy ----------------
+// This is the key fix: serve the image from YOUR domain so canvas can read pixels.
+const ALLOWED_IMAGE_HOSTS = new Set([
+  "i.discogs.com",
+  "img.discogs.com",
+  "s.discogs.com",
+  "upload.wikimedia.org",
+  "commons.wikimedia.org",
+]);
 
-async function discogsFetch(url) {
-  return fetchJson(url, {
-    "User-Agent": DISCOGS_USER_AGENT,
-    ...(DISCOGS_TOKEN ? { "Authorization": `Discogs token=${DISCOGS_TOKEN}` } : {}),
-    "Accept": "application/json"
-  });
-}
+app.get("/api/image", async (req, res) => {
+  try {
+    const raw = String(req.query.url || "");
+    if (!raw) return res.status(400).send("Missing url");
+
+    let u;
+    try {
+      u = new URL(raw);
+    } catch {
+      return res.status(400).send("Bad url");
+    }
+
+    if (!["http:", "https:"].includes(u.protocol)) {
+      return res.status(400).send("Bad protocol");
+    }
+
+    // Safety: allowlist a few known hosts
+    if (!ALLOWED_IMAGE_HOSTS.has(u.hostname)) {
+      return res.status(403).send("Host not allowed");
+    }
+
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 12000);
+
+    try {
+      const upstream = await fetch(u.toString(), {
+        headers: { "User-Agent": DISCOGS_USER_AGENT },
+        signal: controller.signal,
+      });
+
+      if (!upstream.ok) {
+        return res.status(502).send("Upstream image fetch failed");
+      }
+
+      const contentType = upstream.headers.get("content-type") || "image/jpeg";
+      res.setHeader("Content-Type", contentType);
+
+      // Cache a bit in browsers / Render edge
+      res.setHeader("Cache-Control", "public, max-age=86400");
+
+      // Important: same-origin now, so canvas can read it
+      const buf = Buffer.from(await upstream.arrayBuffer());
+      res.send(buf);
+    } finally {
+      clearTimeout(t);
+    }
+  } catch {
+    res.status(500).send("Image proxy error");
+  }
+});
 
 // ---------------- API ----------------
 app.get("/api/lookup", async (req, res) => {
   try {
     const barcode = String(req.query.barcode || "").replace(/\D/g, "");
-    if (barcode.length < 10) {
-      return res.status(400).json({ error: "Invalid barcode" });
-    }
+    if (barcode.length < 10) return res.status(400).json({ error: "Invalid barcode" });
 
     const cached = cacheGet(barcode);
     if (cached) return res.json({ ...cached, cached: true });
 
-    // Discogs search by barcode
     const search = await discogsFetch(
       `https://api.discogs.com/database/search?barcode=${barcode}&type=release&per_page=5`
     );
@@ -136,60 +187,58 @@ app.get("/api/lookup", async (req, res) => {
 
     const release = await discogsFetch(hit.resource_url);
 
-    const title = release.title || (hit.title || "");
+    const title = release.title || hit.title || "";
     const artist =
       Array.isArray(release.artists) && release.artists[0]
         ? release.artists[0].name
         : (hit.title ? String(hit.title).split(" - ")[0] : "");
 
-    const cover =
-      release.images?.find(i => i.type === "primary")?.uri ||
+    const year = release.year || hit.year || null;
+    const labels = uniq((release.labels || []).map((l) => l.name));
+
+    // Original cover URL (remote)
+    const coverRemote =
+      release.images?.find((i) => i.type === "primary")?.uri ||
       release.thumb ||
       hit.cover_image ||
       "";
 
-    const year = release.year || hit.year || null;
-    const labels = uniq((release.labels || []).map(l => l.name));
+    // Proxied cover URL (same-origin) — THIS makes the theming work again
+    const cover = coverRemote ? `/api/image?url=${encodeURIComponent(coverRemote)}` : "";
 
-    // -------- Facts (quote-style) --------
+    // -------- Facts (with sources) --------
     let facts = [];
 
-    // Wikipedia summary facts first (human story)
     const wikiFacts = await fetchWikipediaFacts(artist, title);
     facts.push(...wikiFacts);
 
-    // Discogs notes can be lovely (collector anecdotes)
     if (release.notes) {
-      const noteSentences = String(release.notes)
+      const noteFacts = String(release.notes)
         .split(/(?<=\.)\s+/)
         .map(cleanSentence)
         .filter(looksInteresting)
         .slice(0, 2)
         .map((text) => ({ text, source: "Discogs" }));
-
-      facts.push(...noteSentences);
+      facts.push(...noteFacts);
     }
 
-    // Gentle fallback (still human-ish), but clearly not “gossip”
     if (!facts.length) {
-      const fallbackBits = [];
-      if (year) fallbackBits.push(`Released in ${year}.`);
-      if (labels[0]) fallbackBits.push(`Issued on ${labels[0]}.`);
-      if (fallbackBits.length) {
-        facts.push({ text: fallbackBits.join(" "), source: "Discogs" });
-      } else {
-        facts.push({ text: "No extra facts available yet.", source: "Discogs" });
-      }
+      const fb = [];
+      if (year) fb.push(`Released in ${year}.`);
+      if (labels[0]) fb.push(`Issued on ${labels[0]}.`);
+      facts.push({ text: fb.join(" ") || "No extra facts available yet.", source: "Discogs" });
     }
 
     // Deduplicate by text
     const seen = new Set();
-    facts = facts.filter(f => {
-      const k = (f.text || "").toLowerCase();
-      if (!k || seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    }).slice(0, 6);
+    facts = facts
+      .filter((f) => {
+        const k = (f.text || "").toLowerCase();
+        if (!k || seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      })
+      .slice(0, 6);
 
     const payload = {
       barcode,
@@ -198,12 +247,12 @@ app.get("/api/lookup", async (req, res) => {
       year,
       labels,
       cover,
-      facts
+      coverRemote, // optional (kept for debugging)
+      facts,
     };
 
     cacheSet(barcode, payload);
     res.json(payload);
-
   } catch (err) {
     res.status(500).json({ error: err.message || "Server error" });
   }
@@ -211,10 +260,6 @@ app.get("/api/lookup", async (req, res) => {
 
 // ---------------- Static ----------------
 app.use(express.static(path.join(__dirname, "public")));
-app.get("*", (_, res) =>
-  res.sendFile(path.join(__dirname, "public", "index.html"))
-);
+app.get("*", (_, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
-app.listen(PORT, () =>
-  console.log(`VinylScanner running on ${PORT}`)
-);
+app.listen(PORT, () => console.log(`VinylScanner running on ${PORT}`));
