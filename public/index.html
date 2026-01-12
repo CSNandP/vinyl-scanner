@@ -9,8 +9,6 @@
     :root{
       --bg:#ffffff; --fg:#111111;
       --muted: rgba(0,0,0,0.70);
-      --panel: rgba(255,255,255,0.86);
-      --border: rgba(0,0,0,0.14);
 
       --wash: rgba(0,0,0,0.00);
       --wash2: rgba(0,0,0,0.00);
@@ -252,7 +250,7 @@
 
     @keyframes spin{ from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
 
-    /* ---------- RIGHT SIDE: album header + quote hero ---------- */
+    /* ---------- RIGHT SIDE ---------- */
     .rightSide{
       width:372px;
       min-width:0;
@@ -264,9 +262,7 @@
       box-sizing:border-box;
     }
 
-    /* Album info becomes a small “header band” */
     .albumHeader{
-      background: rgba(255,255,255,0.00);
       padding: 6px 2px 8px 2px;
     }
 
@@ -320,22 +316,33 @@
 
     .quote{
       position: relative;
-      font-family: Georgia, "Times New Roman", Times, serif; /* subtle serif for quote */
+      font-family: Georgia, "Times New Roman", Times, serif;
       font-style: italic;
-      font-size: 28px;            /* BIG */
+      font-size: 28px;
       font-weight: 700;
       line-height: 1.12;
       letter-spacing: -0.25px;
       opacity: 0.98;
-      padding: 20px 8px 18px 10px;
+
+      /* Key: create predictable “safe margins” for quote marks */
+      padding: 18px 22px 18px 26px;
+
       min-height: 230px;
+      transform-origin: 30% 55%;
     }
 
+    /* breathing: extremely subtle */
+    @keyframes quoteBreathe {
+      0%, 100% { transform: translateY(0) scale(1); opacity: 0.98; }
+      50%      { transform: translateY(-1px) scale(1.008); opacity: 1; }
+    }
+
+    /* The marks: closer and anchored to the quote’s padding */
     .quote::before,
     .quote::after{
       position:absolute;
       font-style: normal;
-      font-size: 78px;
+      font-size: 64px;
       font-weight: 900;
       line-height: 1;
       color: var(--title);
@@ -345,15 +352,16 @@
 
     .quote::before{
       content: "“";
-      left: -6px;
-      top: -14px;
+      left: 2px;         /* sits inside the padding area */
+      top: -6px;
     }
     .quote::after{
       content: "”";
-      right: -2px;
-      bottom: -34px;
+      right: 6px;        /* sits inside the padding area */
+      bottom: -22px;
     }
 
+    /* Fade/slide for rotations */
     .quoteFade{
       opacity: 0;
       transform: translateY(12px);
@@ -362,6 +370,7 @@
     .quoteFade.show{
       opacity: 1;
       transform: translateY(0);
+      animation: quoteBreathe 8.5s ease-in-out infinite;
     }
 
     .source{
@@ -524,7 +533,7 @@
     setQuote(item.text, item.source, animate);
   }
 
-  // --- Splash ---
+  // --- Splash (unchanged) ---
   const fontCycle = [
     'system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
     '"Trebuchet MS", system-ui, sans-serif',
@@ -633,7 +642,6 @@
     safeStartSplashIdleFonts();
   }
 
-  // initial splash state
   if (sessionStorage.getItem("started") === "1") {
     const sp = getSplash();
     if (sp) sp.remove();
@@ -727,13 +735,10 @@
       document.documentElement.style.setProperty("--wash",  `rgba(${r},${g},${b},0.18)`);
       document.documentElement.style.setProperty("--wash2", `rgba(${r},${g},${b},0.10)`);
 
-      const dark = (l/n) < 110;
-
-      document.documentElement.style.setProperty("--bg", dark ? "#0f1115" : "#ffffff");
-      document.documentElement.style.setProperty("--fg", dark ? "#f0f2f5" : "#111111");
-      document.documentElement.style.setProperty("--muted", dark ? "rgba(240,242,245,0.72)" : "rgba(0,0,0,0.70)");
-      document.documentElement.style.setProperty("--shadow", dark ? "rgba(0,0,0,0.44)" : "rgba(0,0,0,0.16)");
-      document.documentElement.style.setProperty("--shadow2", dark ? "rgba(0,0,0,0.26)" : "rgba(0,0,0,0.08)");
+      // keep background fixed to your preference (if you want auto-dark back, say so)
+      document.documentElement.style.setProperty("--bg", "#ffffff");
+      document.documentElement.style.setProperty("--fg", "#111111");
+      document.documentElement.style.setProperty("--muted", "rgba(0,0,0,0.70)");
     } catch {}
   }
 
