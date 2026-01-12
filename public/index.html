@@ -50,7 +50,6 @@
     }
     .splash.hidden { opacity: 0; pointer-events: none; }
 
-    /* Animated "record groove" background */
     .splash::before{
       content:"";
       position:absolute;
@@ -127,16 +126,14 @@
       user-select: none;
     }
 
-    /* Fade/slide states */
     .splash-title.out { opacity: 0; transform: translateY(-10px); }
     .splash-title.in  { opacity: 1; transform: translateY(0); }
 
-    /* When showing live barcode: use a more “digital” feel */
     .splash-title.code {
       letter-spacing: 2.2px;
       font-variant-numeric: tabular-nums;
       text-transform: none;
-      animation: none; /* keep it steady while digits stream in */
+      animation: none;
     }
 
     .splash-sub {
@@ -295,7 +292,8 @@
 
     .meta{ font-size: 12.5px; margin-top: 6px; color: var(--muted); }
 
-    .tracks{
+    /* ---------- FACTS ---------- */
+    .facts{
       margin-top: 10px;
       display:flex;
       flex-direction:column;
@@ -303,7 +301,7 @@
       flex: 1 1 auto;
     }
 
-    .tracks h2{
+    .facts h2{
       font-size: 12.5px;
       margin: 0 0 6px 0;
       font-weight: 900;
@@ -313,31 +311,45 @@
       opacity: 0.9;
     }
 
-    .tracks-box{
+    .facts-box{
       border: 1px solid var(--border);
       border-radius:12px;
-      padding: 8px 10px;
+      padding: 10px 10px;
       background: rgba(255,255,255,0.50);
       transition: background 0.7s ease, border-color 0.7s ease;
       flex: 1 1 auto;
       min-height: 0;
-      overflow: auto;
+      overflow: hidden; /* facts should fit; no scrolling needed */
+      display:flex;
+      flex-direction:column;
+      justify-content:flex-start;
+      gap: 8px;
     }
 
-    .side{
-      margin: 8px 0 5px 0;
-      font-size: 11.5px;
-      font-weight: 950;
-      letter-spacing: 0.9px;
-      text-transform: uppercase;
-      opacity: 0.62;
+    .fact{
+      display:flex;
+      gap: 8px;
+      align-items:flex-start;
+      font-size: 13px;
+      line-height: 1.18;
     }
 
-    .tracks-box ol{ margin: 0; padding-left: 18px; }
-    .tracks-box li{ font-size: 12.8px; margin: 5px 0; line-height: 1.12; }
+    .dot{
+      width: 7px;
+      height: 7px;
+      border-radius: 99px;
+      margin-top: 5px;
+      background: rgba(0,0,0,0.22);
+      flex: 0 0 auto;
+    }
 
-    .pos{ font-weight: 950; margin-right: 6px; opacity: 0.95; }
-    .dur{ opacity: 0.65; margin-left: 6px; font-size: 11.8px; }
+    .fact span{
+      opacity: 0.92;
+    }
+
+    .fact .muted{
+      opacity: 0.70;
+    }
 
     /* ---------- FOOTER with Back button ---------- */
     .footer{
@@ -379,14 +391,6 @@
       border-color: rgba(0,0,0,0.14);
       background: rgba(0,0,0,0.03);
     }
-
-    /* Make back button work nicely in dark theme too */
-    @media (prefers-color-scheme: dark) {
-      .back:hover{
-        border-color: rgba(240,242,245,0.16);
-        background: rgba(240,242,245,0.06);
-      }
-    }
   </style>
 </head>
 
@@ -418,10 +422,10 @@
         <div id="year" class="meta fade"></div>
         <div id="label" class="meta fade"></div>
 
-        <div class="tracks">
-          <h2 class="fade">Track listing</h2>
-          <div id="tracks" class="tracks-box fade">
-            <div style="opacity:.6;">Scan a record to show tracks</div>
+        <div class="facts">
+          <h2 class="fade">Album facts</h2>
+          <div id="facts" class="facts-box fade">
+            <div class="fact"><div class="dot"></div><span class="muted">Scan a record to show facts</span></div>
           </div>
         </div>
       </div>
@@ -445,11 +449,6 @@
   let submitTimer = null;
 
   // --- Splash ---
-  const splash = $("splash");
-  const splashTitle = $("splashTitle");
-  const splashSub = $("splashSub");
-
-  // Font cycle for idle mode (Scan Record)
   const fontCycle = [
     'system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
     '"Trebuchet MS", system-ui, sans-serif',
@@ -466,117 +465,23 @@
   let fontBusy = false;
   let splashMode = "idle"; // idle | code | lookup
 
-  function startSplashIdleFonts(){
-    if (!splashTitle) return;
-    splashMode = "idle";
-    splashTitle.classList.remove("code");
-    splashTitle.style.fontFamily = fontCycle[0];
-    splashTitle.textContent = "Scan Record";
-    if (splashSub) splashSub.textContent = "Ready";
-
-    if (fontTimer) clearInterval(fontTimer);
-    fontTimer = setInterval(async () => {
-      if (fontBusy) return;
-      if (splashMode !== "idle") return; // only animate in idle
-      fontBusy = true;
-
-      splashTitle.classList.add("out");
-      splashTitle.classList.remove("in");
-      await new Promise(r => setTimeout(r, 320));
-
-      fontIdx = (fontIdx + 1) % fontCycle.length;
-      splashTitle.style.fontFamily = fontCycle[fontIdx];
-
-      splashTitle.classList.remove("out");
-      splashTitle.classList.add("in");
-      await new Promise(r => setTimeout(r, 320));
-
-      fontBusy = false;
-    }, 1400);
-  }
-
-  function setSplashBarcodeLive(digits){
-    if (!splashTitle) return;
-    splashMode = "code";
-    splashTitle.classList.add("code");
-    splashTitle.style.fontFamily = '"Courier New", Courier, monospace';
-    splashTitle.textContent = digits || "";
-    if (splashSub) splashSub.textContent = "Scanning…";
-  }
-
-  function setSplashLookingUp(){
-    if (!splashTitle) return;
-    splashMode = "lookup";
-    splashTitle.classList.remove("code");
-    splashTitle.style.fontFamily = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
-    splashTitle.textContent = "Looking up…";
-    if (splashSub) splashSub.textContent = "Please wait";
-  }
-
-  function hideSplashOnce(){
-    if (!splash) return;
-    if (sessionStorage.getItem("started") === "1") return;
-
-    sessionStorage.setItem("started", "1");
-    splash.classList.add("hidden");
-    setTimeout(() => splash.remove(), 900);
-
-    if (fontTimer) clearInterval(fontTimer);
-  }
-
-  function showSplashAgain(){
-    // Bring the splash back without full page reload
-    sessionStorage.removeItem("started");
-
-    // If splash element was removed, recreate it
-    if (!document.getElementById("splash")) {
-      const div = document.createElement("div");
-      div.id = "splash";
-      div.className = "splash";
-      div.innerHTML = `
-        <div class="splash-inner">
-          <div class="splash-title-wrap">
-            <div id="splashTitle" class="splash-title in">Scan Record</div>
-          </div>
-          <div id="splashSub" class="splash-sub">Ready</div>
-        </div>`;
-      document.body.prepend(div);
-    }
-
-    // rebind refs
-    window.__splash = document.getElementById("splash");
-    window.__splashTitle = document.getElementById("splashTitle");
-    window.__splashSub = document.getElementById("splashSub");
-
-    // set globals used below
-    // (we’ll re-point our local vars via getters)
-    startSplashIdleFonts();
-    document.getElementById("splash").classList.remove("hidden");
-  }
-
-  // Helpers that always grab current elements (works even after recreate)
   const getSplash = () => document.getElementById("splash");
   const getSplashTitle = () => document.getElementById("splashTitle");
   const getSplashSub = () => document.getElementById("splashSub");
 
-  // Override functions to use getters (so recreated splash works)
-  function splashTitleEl(){ return getSplashTitle(); }
-  function splashSubEl(){ return getSplashSub(); }
-
-  // Patch the above functions to use getters safely
   function safeStartSplashIdleFonts(){
-    const st = splashTitleEl();
+    const st = getSplashTitle();
     if (!st) return;
     splashMode = "idle";
     st.classList.remove("code");
     st.style.fontFamily = fontCycle[0];
     st.textContent = "Scan Record";
-    const ss = splashSubEl();
+    const ss = getSplashSub();
     if (ss) ss.textContent = "Ready";
 
     if (fontTimer) clearInterval(fontTimer);
     fontTimer = setInterval(async () => {
-      const st2 = splashTitleEl();
+      const st2 = getSplashTitle();
       if (!st2) return;
       if (fontBusy) return;
       if (splashMode !== "idle") return;
@@ -598,24 +503,24 @@
   }
 
   function safeSetSplashBarcodeLive(digits){
-    const st = splashTitleEl();
+    const st = getSplashTitle();
     if (!st) return;
     splashMode = "code";
     st.classList.add("code");
     st.style.fontFamily = '"Courier New", Courier, monospace';
     st.textContent = digits || "";
-    const ss = splashSubEl();
+    const ss = getSplashSub();
     if (ss) ss.textContent = "Scanning…";
   }
 
   function safeSetSplashLookingUp(){
-    const st = splashTitleEl();
+    const st = getSplashTitle();
     if (!st) return;
     splashMode = "lookup";
     st.classList.remove("code");
     st.style.fontFamily = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
     st.textContent = "Looking up…";
-    const ss = splashSubEl();
+    const ss = getSplashSub();
     if (ss) ss.textContent = "Please wait";
   }
 
@@ -629,6 +534,27 @@
     setTimeout(() => sp.remove(), 900);
 
     if (fontTimer) clearInterval(fontTimer);
+  }
+
+  function showSplashAgain(){
+    sessionStorage.removeItem("started");
+
+    if (!document.getElementById("splash")) {
+      const div = document.createElement("div");
+      div.id = "splash";
+      div.className = "splash";
+      div.innerHTML = `
+        <div class="splash-inner">
+          <div class="splash-title-wrap">
+            <div id="splashTitle" class="splash-title in">Scan Record</div>
+          </div>
+          <div id="splashSub" class="splash-sub">Ready</div>
+        </div>`;
+      document.body.prepend(div);
+    }
+
+    document.getElementById("splash").classList.remove("hidden");
+    safeStartSplashIdleFonts();
   }
 
   // initial splash state
@@ -659,7 +585,7 @@
     $("year").textContent = "";
     $("label").textContent = "";
     $("cover").src = "";
-    $("tracks").innerHTML = "<div style='opacity:.6;'>Scan a record to show tracks</div>";
+    $("facts").innerHTML = `<div class="fact"><div class="dot"></div><span class="muted">Scan a record to show facts</span></div>`;
     if (!keepStatus) setStatus("Ready for scan…");
 
     document.documentElement.style.setProperty("--wash", "rgba(0,0,0,0)");
@@ -675,8 +601,8 @@
       { sel: "#artist", ms: 140 },
       { sel: "#year", ms: 190 },
       { sel: "#label", ms: 230 },
-      { sel: ".tracks h2", ms: 270 },
-      { sel: "#tracks", ms: 310 }
+      { sel: ".facts h2", ms: 270 },
+      { sel: "#facts", ms: 310 }
     ];
 
     for (const s of steps) {
@@ -687,38 +613,43 @@
     }
   }
 
-  function sideFromPosition(pos) {
-    const m = String(pos || "").toUpperCase().match(/^([A-Z])/);
-    return m ? m[1] : "";
+  function renderFactsFromApiOrFallback(data){
+    // Preferred: API provides facts: ["Released in 1977", "Genre: Punk", ...]
+    let facts = Array.isArray(data.facts) ? data.facts.filter(Boolean) : [];
+
+    // Fallback: generate a few from known fields so it never looks empty
+    if (!facts.length) {
+      if (data.year) facts.push(`Released: ${data.year}`);
+      if (Array.isArray(data.labels) && data.labels[0]) facts.push(`Label: ${data.labels[0]}`);
+      if (data.country) facts.push(`Country: ${data.country}`);
+      if (Array.isArray(data.genres) && data.genres.length) facts.push(`Genre: ${data.genres.slice(0,2).join(" • ")}`);
+      if (Array.isArray(data.styles) && data.styles.length) facts.push(`Style: ${data.styles.slice(0,2).join(" • ")}`);
+      if (data.community && data.community.rating && data.community.count) {
+        facts.push(`Discogs rating: ${data.community.rating} (${data.community.count} ratings)`);
+      }
+      if (data.stats && (data.stats.have || data.stats.want)) {
+        const have = data.stats.have ? `${data.stats.have} have` : null;
+        const want = data.stats.want ? `${data.stats.want} want` : null;
+        facts.push([have, want].filter(Boolean).join(" • "));
+      }
+      if (!facts.length) facts.push("No extra facts available yet.");
+    }
+
+    // Keep it tidy for the 7" screen
+    facts = facts.slice(0, 6);
+
+    $("facts").innerHTML = facts.map(t =>
+      `<div class="fact"><div class="dot"></div><span>${escapeHtml(t)}</span></div>`
+    ).join("");
   }
 
-  function renderTracksGrouped(tracklist) {
-    if (!Array.isArray(tracklist) || !tracklist.length) {
-      $("tracks").innerHTML = "<div style='opacity:.6;'>No track listing found</div>";
-      return;
-    }
-
-    const groups = {};
-    const order = [];
-
-    for (const t of tracklist) {
-      const side = sideFromPosition(t.position);
-      const key = side || "";
-      if (!groups[key]) { groups[key] = []; order.push(key); }
-      groups[key].push(t);
-    }
-
-    let html = "";
-    for (const side of order) {
-      if (side) html += `<div class="side">Side ${side}</div>`;
-      html += "<ol>" + groups[side].map(t => {
-        const pos = t.position ? `<span class="pos">${t.position}</span>` : "";
-        const dur = t.duration ? ` <span class="dur">(${t.duration})</span>` : "";
-        return `<li>${pos}${t.title || ""}${dur}</li>`;
-      }).join("") + "</ol>";
-    }
-
-    $("tracks").innerHTML = html;
+  function escapeHtml(str){
+    return String(str)
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
   }
 
   function applyThemeFromCover(img) {
@@ -770,7 +701,6 @@
   async function lookup(code) {
     if (!code || code.length < 10) return;
 
-    // on first valid scan attempt:
     safeSetSplashLookingUp();
     safeHideSplashOnce();
 
@@ -787,7 +717,8 @@
       $("artist").textContent = (data.artists||[]).join(" • ");
       $("year").textContent = data.year ? `Year: ${data.year}` : "";
       $("label").textContent = (data.labels||[]).length ? `Label: ${data.labels[0]}` : "";
-      renderTracksGrouped(data.tracklist);
+
+      renderFactsFromApiOrFallback(data);
 
       if (data.cover) {
         const img = $("cover");
@@ -814,7 +745,6 @@
       buffer = "";
       if (digits.length >= 10) lookup(digits);
       else {
-        // return splash to idle prompt if someone typed a couple of digits then stopped
         if (sessionStorage.getItem("started") !== "1") safeStartSplashIdleFonts();
       }
     }, SUBMIT_AFTER_MS);
@@ -836,7 +766,6 @@
     }
 
     if (/[0-9]/.test(e.key)) {
-      // While still on splash, show live digits
       if (sessionStorage.getItem("started") !== "1") {
         const digits = (buffer + e.key).replace(/\D/g,"");
         safeSetSplashBarcodeLive(digits);
@@ -846,23 +775,18 @@
     }
   }, true);
 
-  // Back to splash button
   $("backBtn").addEventListener("click", () => {
-    // Stop any pending submit
     if (submitTimer) clearTimeout(submitTimer);
     buffer = "";
 
-    // Reset UI
     clearReveal();
     clearDisplay(false);
     setStatus("Ready for scan…");
 
-    // Pause cover spin
     const cover = $("cover");
     cover.style.animationPlayState = "paused";
     cover.classList.remove("show");
 
-    // Bring splash back
     showSplashAgain();
     safeStartSplashIdleFonts();
   });
