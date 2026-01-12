@@ -1,5 +1,4 @@
-// server.js (CommonJS)
-// Vinyl Scanner server: barcode -> Discogs -> return cover + album info + facts[]
+// server.js — Wiki-style album facts (human, anecdotal)
 
 const express = require("express");
 const path = require("path");
@@ -11,9 +10,9 @@ const DISCOGS_TOKEN = process.env.DISCOGS_TOKEN || "";
 const DISCOGS_USER_AGENT =
   process.env.DISCOGS_USER_AGENT || "VinylScanner/1.0 (+https://example.com)";
 
-// --------- Simple in-memory cache ----------
-const CACHE_TTL_MS = 1000 * 60 * 60 * 24; // 24 hours
-const cache = new Map(); // key -> { ts, data }
+// ---------------- Cache ----------------
+const CACHE_TTL_MS = 1000 * 60 * 60 * 24;
+const cache = new Map();
 
 function cacheGet(key) {
   const hit = cache.get(key);
@@ -28,234 +27,152 @@ function cacheSet(key, data) {
   cache.set(key, { ts: Date.now(), data });
 }
 
-// --------- Helpers ----------
-function pickReleaseFromSearchResults(results = []) {
-  const releases = results.filter((r) => r.type === "release");
-  if (releases.length) return releases[0];
-  return results[0] || null;
-}
-
+// ---------------- Utilities ----------------
 function uniq(arr) {
   return [...new Set((arr || []).filter(Boolean))];
 }
 
-function niceJoin(arr, max = 3, sep = " • ") {
-  const a = uniq(arr);
-  return a.slice(0, max).join(sep);
+function cleanSentence(s) {
+  return s
+    .replace(/\s+/g, " ")
+    .replace(/\[[^\]]+\]/g, "") // remove [1] citations
+    .trim();
 }
 
-function plural(n, one, many) {
-  return n === 1 ? one : many;
+function looksInteresting(s) {
+  return (
+    s.length > 50 &&
+    s.length < 180 &&
+    !s.match(/may refer to|can refer to|is an album by/i)
+  );
 }
 
-function buildFactsFromDiscogsRelease(release) {
-  const facts = [];
-
-  if (release.year) facts.push(`Released: ${release.year}`);
-  if (release.country) facts.push(`Country: ${release.country}`);
-
-  if (Array.isArray(release.labels) && release.labels.length) {
-    const l = release.labels[0];
-    const labelName = l && l.name ? String(l.name) : null;
-    const catno = l && l.catno ? String(l.catno) : null;
-
-    if (labelName && catno) facts.push(`Label: ${labelName} — ${catno}`);
-    else if (labelName) facts.push(`Label: ${labelName}`);
-  }
-
-  if (Array.isArray(release.formats) && release.formats.length) {
-    const f = release.formats[0];
-    const formatName = f && f.name ? String(f.name) : null;
-    const qty = f && f.qty ? String(f.qty) : null;
-    const desc = Array.isArray(f && f.descriptions) ? f.descriptions : [];
-
-    const bits = [];
-    if (qty && formatName) bits.push(`${qty}× ${formatName}`);
-    else if (formatName) bits.push(formatName);
-
-    const d = niceJoin(desc, 3, " / ");
-    if (d) bits.push(d);
-
-    if (bits.length) facts.push(`Format: ${bits.join(" — ")}`);
-  }
-
-  if (Array.isArray(release.genres) && release.genres.length) {
-    facts.push(`Genre: ${niceJoin(release.genres, 3)}`);
-  }
-  if (Array.isArray(release.styles) && release.styles.length) {
-    facts.push(`Style: ${niceJoin(release.styles, 3)}`);
-  }
-
-  const have = release && release.community ? release.community.have : undefined;
-  const want = release && release.community ? release.community.want : undefined;
-
-  if (Number.isFinite(have) || Number.isFinite(want)) {
-    const haveStr = Number.isFinite(have)
-      ? `${have} ${plural(have, "person has", "people have")}`
-      : null;
-    const wantStr = Number.isFinite(want)
-      ? `${want} ${plural(want, "person wants", "people want")}`
-      : null;
-    facts.push([haveStr, wantStr].filter(Boolean).join(" • "));
-  }
-
-  const ratingAvg = release && release.community && release.community.rating
-    ? release.community.rating.average
-    : undefined;
-
-  const ratingCount = release && release.community && release.community.rating
-    ? release.community.rating.count
-    : undefined;
-
-  if (Number.isFinite(ratingAvg) && Number.isFinite(ratingCount)) {
-    facts.push(`Rating: ${ratingAvg.toFixed(2)} (${ratingCount} ratings)`);
-  } else if (Number.isFinite(ratingAvg)) {
-    facts.push(`Rating: ${ratingAvg.toFixed(2)}`);
-  }
-
-  return facts.slice(0, 6);
+async function fetchJson(url, headers = {}) {
+  const res = await fetch(url, { headers });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
 }
 
-async function fetchJson(url, { timeoutMs = 9000 } = {}) {
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), timeoutMs);
+// ---------------- Wikipedia facts ----------------
+async function fetchWikipediaFacts(artist, album) {
+  const title = `${album} (${artist} album)`;
+  const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
 
   try {
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": DISCOGS_USER_AGENT,
-        ...(DISCOGS_TOKEN ? { "Authorization": `Discogs token=${DISCOGS_TOKEN}` } : {}),
-        "Accept": "application/json"
-      },
-      signal: controller.signal
+    const data = await fetchJson(url, {
+      "User-Agent": DISCOGS_USER_AGENT,
+      "Accept": "application/json"
     });
 
-    const text = await res.text();
-    let json = null;
-    try { json = JSON.parse(text); } catch {}
+    const text = data.extract || "";
+    const sentences = text.split(/(?<=\.)\s+/);
 
-    if (!res.ok) {
-      const msg = (json && (json.message || json.error)) || text || `HTTP ${res.status}`;
-      const err = new Error(msg);
-      err.status = res.status;
-      throw err;
-    }
-
-    return json;
-  } finally {
-    clearTimeout(t);
+    return sentences
+      .map(cleanSentence)
+      .filter(looksInteresting)
+      .slice(0, 4);
+  } catch {
+    return [];
   }
 }
 
-// --------- API ----------
+// ---------------- Discogs helpers ----------------
+function pickRelease(results = []) {
+  return results.find(r => r.type === "release") || results[0] || null;
+}
+
+async function discogsFetch(url) {
+  return fetchJson(url, {
+    "User-Agent": DISCOGS_USER_AGENT,
+    ...(DISCOGS_TOKEN ? { "Authorization": `Discogs token=${DISCOGS_TOKEN}` } : {})
+  });
+}
+
+// ---------------- API ----------------
 app.get("/api/lookup", async (req, res) => {
   try {
-    const raw = String(req.query.barcode || "");
-    const barcode = raw.replace(/\D/g, "");
-
+    const barcode = String(req.query.barcode || "").replace(/\D/g, "");
     if (barcode.length < 10) {
       return res.status(400).json({ error: "Invalid barcode" });
     }
 
     const cached = cacheGet(barcode);
-    if (cached) {
-      return res.json({ ...cached, cached: true });
-    }
+    if (cached) return res.json({ ...cached, cached: true });
 
-    // Discogs database search by barcode
-    const searchUrl =
-      `https://api.discogs.com/database/search?barcode=${encodeURIComponent(barcode)}&type=release&per_page=5`;
+    // Discogs search
+    const search = await discogsFetch(
+      `https://api.discogs.com/database/search?barcode=${barcode}&type=release&per_page=5`
+    );
 
-    const search = await fetchJson(searchUrl);
-    const hit = pickReleaseFromSearchResults(search && search.results ? search.results : []);
+    const hit = pickRelease(search.results);
+    if (!hit) return res.status(404).json({ error: "No match found" });
 
-    if (!hit) {
-      return res.status(404).json({ error: "No match found" });
-    }
+    const release = await discogsFetch(hit.resource_url);
 
-    const resourceUrl = hit.resource_url;
-    if (!resourceUrl) {
-      return res.status(500).json({ error: "Missing release URL from Discogs search result" });
-    }
-
-    const release = await fetchJson(resourceUrl);
-
-    const title = (release && release.title) || hit.title || "";
-    const artists = Array.isArray(release && release.artists)
-      ? release.artists.map((a) => a && a.name).filter(Boolean)
-      : (hit.title ? [String(hit.title).split(" - ")[0]] : []);
-
-    const year = (release && release.year) || hit.year || null;
-
-    const labels = Array.isArray(release && release.labels)
-      ? uniq(release.labels.map((l) => l && l.name))
-      : [];
+    const title = release.title;
+    const artist =
+      Array.isArray(release.artists) && release.artists[0]
+        ? release.artists[0].name
+        : "";
 
     const cover =
-      (release && release.images && release.images.find((i) => i && i.type === "primary") || {}).uri ||
-      (release && release.thumb) ||
+      release.images?.find(i => i.type === "primary")?.uri ||
+      release.thumb ||
       hit.cover_image ||
       "";
 
-    const country = (release && release.country) || null;
-    const genres = Array.isArray(release && release.genres) ? release.genres : [];
-    const styles = Array.isArray(release && release.styles) ? release.styles : [];
+    const year = release.year || null;
+    const labels = uniq(release.labels?.map(l => l.name));
 
-    const community = release && release.community
-      ? {
-          have: release.community.have,
-          want: release.community.want,
-          rating: release.community.rating
-            ? { average: release.community.rating.average, count: release.community.rating.count }
-            : undefined
-        }
-      : undefined;
+    // -------- Collect facts --------
+    let facts = [];
 
-    const stats = {
-      have: Number.isFinite(release && release.community ? release.community.have : NaN)
-        ? release.community.have
-        : undefined,
-      want: Number.isFinite(release && release.community ? release.community.want : NaN)
-        ? release.community.want
-        : undefined
-    };
+    // Wikipedia first (story-driven)
+    const wikiFacts = await fetchWikipediaFacts(artist, title);
+    facts.push(...wikiFacts);
 
-    const facts = buildFactsFromDiscogsRelease(release);
+    // Discogs notes (often anecdotal)
+    if (release.notes) {
+      const noteSentences = release.notes
+        .split(/(?<=\.)\s+/)
+        .map(cleanSentence)
+        .filter(looksInteresting)
+        .slice(0, 2);
+
+      facts.push(...noteSentences);
+    }
+
+    // Gentle fallback if still sparse
+    if (!facts.length && year) {
+      facts.push(`Released in ${year}, this album marked an important moment in the artist’s career.`);
+    }
+
+    facts = uniq(facts).slice(0, 5);
 
     const payload = {
       barcode,
       title,
-      artists: uniq(artists),
+      artists: [artist],
       year,
       labels,
       cover,
-      country,
-      genres,
-      styles,
-      community,
-      stats,
       facts
     };
 
     cacheSet(barcode, payload);
-    return res.json(payload);
-  } catch (err) {
-    const status = err && err.status ? err.status : 500;
+    res.json(payload);
 
-    if (status === 429) {
-      return res.status(429).json({ error: "Rate limited by Discogs. Try again shortly." });
-    }
-    return res.status(status).json({ error: (err && err.message) || "Server error" });
+  } catch (err) {
+    res.status(500).json({ error: err.message || "Server error" });
   }
 });
 
-// --------- Static site ----------
+// ---------------- Static ----------------
 app.use(express.static(path.join(__dirname, "public")));
+app.get("*", (_, res) =>
+  res.sendFile(path.join(__dirname, "public", "index.html"))
+);
 
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-app.listen(PORT, () => {
-  console.log(`VinylScanner listening on ${PORT}`);
-});
+app.listen(PORT, () =>
+  console.log(`VinylScanner running on ${PORT}`)
+);
