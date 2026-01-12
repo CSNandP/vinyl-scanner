@@ -292,7 +292,7 @@
 
     .meta{ font-size: 12.5px; margin-top: 6px; color: var(--muted); }
 
-    /* ---------- FACTS ---------- */
+    /* ---------- FACTS as BIG QUOTE ---------- */
     .facts{
       margin-top: 10px;
       display:flex;
@@ -314,41 +314,92 @@
     .facts-box{
       border: 1px solid var(--border);
       border-radius:12px;
-      padding: 10px 10px;
+      padding: 12px 12px 10px 12px;
       background: rgba(255,255,255,0.50);
       transition: background 0.7s ease, border-color 0.7s ease;
+
       flex: 1 1 auto;
       min-height: 0;
-      overflow: hidden; /* facts should fit; no scrolling needed */
+      overflow: hidden;
+
       display:flex;
       flex-direction:column;
-      justify-content:flex-start;
-      gap: 8px;
+      justify-content:space-between;
+      gap: 10px;
     }
 
-    .fact{
+    .quoteWrap{
       display:flex;
-      gap: 8px;
-      align-items:flex-start;
-      font-size: 13px;
+      flex-direction:column;
+      gap: 10px;
+      min-height: 0;
+    }
+
+    .quote{
+      position: relative;
+      font-size: 18px;            /* big */
+      font-weight: 700;
       line-height: 1.18;
+      letter-spacing: -0.1px;
+      opacity: 0.96;
+      padding: 4px 2px 0 2px;
+      min-height: 110px;          /* holds layout as it rotates */
     }
 
-    .dot{
-      width: 7px;
-      height: 7px;
-      border-radius: 99px;
-      margin-top: 5px;
-      background: rgba(0,0,0,0.22);
-      flex: 0 0 auto;
+    .quote::before,
+    .quote::after{
+      position:absolute;
+      font-size: 38px;
+      font-weight: 900;
+      line-height: 1;
+      color: var(--title);        /* quote marks match album title colour */
+      opacity: 0.9;
     }
 
-    .fact span{
-      opacity: 0.92;
+    .quote::before{
+      content: "“";
+      left: -6px;
+      top: -10px;
+    }
+    .quote::after{
+      content: "”";
+      right: -4px;
+      bottom: -18px;
     }
 
-    .fact .muted{
-      opacity: 0.70;
+    /* Rotation animation */
+    .quoteFade{
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 0.55s ease, transform 0.55s ease;
+    }
+    .quoteFade.show{
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .source{
+      font-size: 11.5px;
+      letter-spacing: 1.1px;
+      text-transform: uppercase;
+      color: var(--muted);
+      opacity: 0.75;
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap: 6px;
+      user-select:none;
+      white-space: nowrap;
+      overflow:hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sourceTag{
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 2px 8px;
+      background: rgba(255,255,255,0.35);
+      opacity: 0.95;
     }
 
     /* ---------- FOOTER with Back button ---------- */
@@ -423,9 +474,15 @@
         <div id="label" class="meta fade"></div>
 
         <div class="facts">
-          <h2 class="fade">Album facts</h2>
-          <div id="facts" class="facts-box fade">
-            <div class="fact"><div class="dot"></div><span class="muted">Scan a record to show facts</span></div>
+          <h2 class="fade">Album quote</h2>
+          <div class="facts-box fade">
+            <div class="quoteWrap">
+              <div id="quote" class="quote quoteFade">Scan a record to begin.</div>
+            </div>
+            <div id="source" class="source">
+              <span>Source:</span>
+              <span class="sourceTag">—</span>
+            </div>
           </div>
         </div>
       </div>
@@ -447,6 +504,56 @@
   let buffer = "";
   let lastKeyTime = 0;
   let submitTimer = null;
+
+  // -------- Fact rotation state --------
+  let factItems = [];      // [{text, source}]
+  let factIndex = 0;
+  let factTimer = null;
+  const FACT_ROTATE_MS = 6500;
+
+  function stopFactRotation(){
+    if (factTimer) clearInterval(factTimer);
+    factTimer = null;
+  }
+
+  function startFactRotation(){
+    stopFactRotation();
+    if (!factItems || factItems.length <= 1) return;
+    factTimer = setInterval(() => {
+      factIndex = (factIndex + 1) % factItems.length;
+      showFact(factIndex, true);
+    }, FACT_ROTATE_MS);
+  }
+
+  function setQuote(text, source, animate){
+    const quoteEl = $("quote");
+    const sourceEl = $("source");
+    if (!quoteEl || !sourceEl) return;
+
+    const tag = sourceEl.querySelector(".sourceTag");
+
+    if (animate) {
+      quoteEl.classList.remove("show");
+      setTimeout(() => {
+        quoteEl.textContent = text || "";
+        if (tag) tag.textContent = source || "—";
+        quoteEl.classList.add("show");
+      }, 220);
+    } else {
+      quoteEl.textContent = text || "";
+      if (tag) tag.textContent = source || "—";
+      quoteEl.classList.add("show");
+    }
+  }
+
+  function showFact(i, animate){
+    if (!factItems.length) {
+      setQuote("No facts available yet.", "—", animate);
+      return;
+    }
+    const item = factItems[i] || factItems[0];
+    setQuote(item.text, item.source, animate);
+  }
 
   // --- Splash ---
   const fontCycle = [
@@ -585,9 +692,16 @@
     $("year").textContent = "";
     $("label").textContent = "";
     $("cover").src = "";
-    $("facts").innerHTML = `<div class="fact"><div class="dot"></div><span class="muted">Scan a record to show facts</span></div>`;
+
+    // reset facts/quote
+    stopFactRotation();
+    factItems = [];
+    factIndex = 0;
+    setQuote("Scan a record to begin.", "—", false);
+
     if (!keepStatus) setStatus("Ready for scan…");
 
+    // reset theme (so the wash/title colour is obvious when next cover loads)
     document.documentElement.style.setProperty("--wash", "rgba(0,0,0,0)");
     document.documentElement.style.setProperty("--wash2", "rgba(0,0,0,0)");
     document.documentElement.style.setProperty("--title", "var(--fg)");
@@ -602,7 +716,7 @@
       { sel: "#year", ms: 190 },
       { sel: "#label", ms: 230 },
       { sel: ".facts h2", ms: 270 },
-      { sel: "#facts", ms: 310 }
+      { sel: ".facts-box", ms: 310 }
     ];
 
     for (const s of steps) {
@@ -611,45 +725,6 @@
         if (el) el.classList.add("show");
       }, s.ms);
     }
-  }
-
-  function renderFactsFromApiOrFallback(data){
-    // Preferred: API provides facts: ["Released in 1977", "Genre: Punk", ...]
-    let facts = Array.isArray(data.facts) ? data.facts.filter(Boolean) : [];
-
-    // Fallback: generate a few from known fields so it never looks empty
-    if (!facts.length) {
-      if (data.year) facts.push(`Released: ${data.year}`);
-      if (Array.isArray(data.labels) && data.labels[0]) facts.push(`Label: ${data.labels[0]}`);
-      if (data.country) facts.push(`Country: ${data.country}`);
-      if (Array.isArray(data.genres) && data.genres.length) facts.push(`Genre: ${data.genres.slice(0,2).join(" • ")}`);
-      if (Array.isArray(data.styles) && data.styles.length) facts.push(`Style: ${data.styles.slice(0,2).join(" • ")}`);
-      if (data.community && data.community.rating && data.community.count) {
-        facts.push(`Discogs rating: ${data.community.rating} (${data.community.count} ratings)`);
-      }
-      if (data.stats && (data.stats.have || data.stats.want)) {
-        const have = data.stats.have ? `${data.stats.have} have` : null;
-        const want = data.stats.want ? `${data.stats.want} want` : null;
-        facts.push([have, want].filter(Boolean).join(" • "));
-      }
-      if (!facts.length) facts.push("No extra facts available yet.");
-    }
-
-    // Keep it tidy for the 7" screen
-    facts = facts.slice(0, 6);
-
-    $("facts").innerHTML = facts.map(t =>
-      `<div class="fact"><div class="dot"></div><span>${escapeHtml(t)}</span></div>`
-    ).join("");
-  }
-
-  function escapeHtml(str){
-    return String(str)
-      .replaceAll("&","&amp;")
-      .replaceAll("<","&lt;")
-      .replaceAll(">","&gt;")
-      .replaceAll('"',"&quot;")
-      .replaceAll("'","&#039;");
   }
 
   function applyThemeFromCover(img) {
@@ -698,6 +773,20 @@
     } catch {}
   }
 
+  function normalizeFacts(data){
+    // server returns: facts: [{text, source}]
+    // but we also handle any older format: ["...", "..."]
+    const raw = data && data.facts ? data.facts : [];
+    const out = [];
+
+    for (const f of (Array.isArray(raw) ? raw : [])) {
+      if (typeof f === "string") out.push({ text: f, source: "—" });
+      else if (f && typeof f.text === "string") out.push({ text: f.text, source: f.source || "—" });
+    }
+
+    return out.filter(x => x.text && x.text.trim());
+  }
+
   async function lookup(code) {
     if (!code || code.length < 10) return;
 
@@ -718,13 +807,21 @@
       $("year").textContent = data.year ? `Year: ${data.year}` : "";
       $("label").textContent = (data.labels||[]).length ? `Label: ${data.labels[0]}` : "";
 
-      renderFactsFromApiOrFallback(data);
+      // facts (rotating)
+      factItems = normalizeFacts(data);
+      factIndex = 0;
+      showFact(0, false);
+      startFactRotation();
 
       if (data.cover) {
         const img = $("cover");
         img.onload = () => {
+          // ✅ bring back title colour + background wash from cover
           applyThemeFromCover(img);
+
+          // spin
           img.style.animationPlayState = "running";
+
           stageReveal();
         };
         img.src = data.cover;
@@ -779,6 +876,7 @@
     if (submitTimer) clearTimeout(submitTimer);
     buffer = "";
 
+    stopFactRotation();
     clearReveal();
     clearDisplay(false);
     setStatus("Ready for scan…");
