@@ -259,7 +259,7 @@
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius:12px;
-      padding:10px;
+      padding:12px;
       box-shadow: 0 10px 26px var(--shadow2);
       transition: background 0.7s ease, border-color 0.7s ease, box-shadow 0.7s ease;
       display:flex;
@@ -292,68 +292,38 @@
 
     .meta{ font-size: 12.5px; margin-top: 6px; color: var(--muted); }
 
-    /* ---------- FACTS as BIG QUOTE ---------- */
-    .facts{
-      margin-top: 10px;
-      display:flex;
-      flex-direction:column;
-      min-height:0;
-      flex: 1 1 auto;
-    }
-
-    .facts h2{
-      font-size: 12.5px;
-      margin: 0 0 6px 0;
-      font-weight: 900;
-      letter-spacing: 0.7px;
-      text-transform: uppercase;
-      color: var(--muted);
-      opacity: 0.9;
-    }
-
-    .facts-box{
-      border: 1px solid var(--border);
-      border-radius:12px;
-      padding: 12px 12px 10px 12px;
-      background: rgba(255,255,255,0.50);
-      transition: background 0.7s ease, border-color 0.7s ease;
-
+    /* ---------- QUOTE AREA (unboxed, hero) ---------- */
+    .quoteArea{
+      margin-top: 14px;
       flex: 1 1 auto;
       min-height: 0;
-      overflow: hidden;
-
       display:flex;
       flex-direction:column;
       justify-content:space-between;
-      gap: 10px;
-    }
-
-    .quoteWrap{
-      display:flex;
-      flex-direction:column;
-      gap: 10px;
-      min-height: 0;
+      padding: 8px 2px 4px 2px;
     }
 
     .quote{
       position: relative;
-      font-size: 18px;
-      font-weight: 700;
-      line-height: 1.18;
-      letter-spacing: -0.1px;
-      opacity: 0.96;
-      padding: 4px 2px 0 2px;
-      min-height: 110px;
+      font-size: 24px;          /* BIGGER */
+      font-weight: 800;
+      line-height: 1.12;
+      letter-spacing: -0.3px;
+      opacity: 0.98;
+      padding: 16px 6px 10px 10px;
+      min-height: 210px;        /* main hero area */
     }
 
+    /* big quote marks */
     .quote::before,
     .quote::after{
       position:absolute;
-      font-size: 38px;
+      font-size: 62px;
       font-weight: 900;
       line-height: 1;
       color: var(--title);
-      opacity: 0.9;
+      opacity: 0.28;            /* classy, not shouty */
+      pointer-events:none;
     }
 
     .quote::before{
@@ -363,14 +333,14 @@
     }
     .quote::after{
       content: "”";
-      right: -4px;
-      bottom: -18px;
+      right: -2px;
+      bottom: -26px;
     }
 
     .quoteFade{
       opacity: 0;
-      transform: translateY(6px);
-      transition: opacity 0.55s ease, transform 0.55s ease;
+      transform: translateY(10px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
     }
     .quoteFade.show{
       opacity: 1;
@@ -378,27 +348,15 @@
     }
 
     .source{
-      font-size: 11.5px;
-      letter-spacing: 1.1px;
+      margin-top: 10px;
+      font-size: 12px;
+      letter-spacing: 1.8px;
       text-transform: uppercase;
       color: var(--muted);
-      opacity: 0.75;
+      opacity: 0.7;
       display:flex;
-      align-items:center;
       justify-content:flex-end;
-      gap: 6px;
       user-select:none;
-      white-space: nowrap;
-      overflow:hidden;
-      text-overflow: ellipsis;
-    }
-
-    .sourceTag{
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 2px 8px;
-      background: rgba(255,255,255,0.35);
-      opacity: 0.95;
     }
 
     /* ---------- FOOTER ---------- */
@@ -472,17 +430,9 @@
         <div id="year" class="meta fade"></div>
         <div id="label" class="meta fade"></div>
 
-        <div class="facts">
-          <h2 class="fade">Album quote</h2>
-          <div class="facts-box fade">
-            <div class="quoteWrap">
-              <div id="quote" class="quote quoteFade">Scan a record to begin.</div>
-            </div>
-            <div id="source" class="source">
-              <span>Source:</span>
-              <span class="sourceTag">—</span>
-            </div>
-          </div>
+        <div class="quoteArea">
+          <div id="quote" class="quote quoteFade">Scan a record to begin.</div>
+          <div id="source" class="source">Source —</div>
         </div>
       </div>
     </div>
@@ -504,7 +454,7 @@
   let lastKeyTime = 0;
   let submitTimer = null;
 
-  // -------- Fact rotation state --------
+  // -------- Fact rotation --------
   let factItems = [];      // [{text, source}]
   let factIndex = 0;
   let factTimer = null;
@@ -526,21 +476,19 @@
 
   function setQuote(text, source, animate){
     const quoteEl = $("quote");
-    const sourceEl = $("source");
-    if (!quoteEl || !sourceEl) return;
-
-    const tag = sourceEl.querySelector(".sourceTag");
+    const srcEl = $("source");
+    if (!quoteEl || !srcEl) return;
 
     if (animate) {
       quoteEl.classList.remove("show");
       setTimeout(() => {
         quoteEl.textContent = text || "";
-        if (tag) tag.textContent = source || "—";
+        srcEl.textContent = source ? `Source — ${source}` : "Source —";
         quoteEl.classList.add("show");
-      }, 220);
+      }, 240);
     } else {
       quoteEl.textContent = text || "";
-      if (tag) tag.textContent = source || "—";
+      srcEl.textContent = source ? `Source — ${source}` : "Source —";
       quoteEl.classList.add("show");
     }
   }
@@ -712,8 +660,8 @@
       { sel: "#artist", ms: 140 },
       { sel: "#year", ms: 190 },
       { sel: "#label", ms: 230 },
-      { sel: ".facts h2", ms: 270 },
-      { sel: ".facts-box", ms: 310 }
+      { sel: "#quote", ms: 280 },
+      { sel: "#source", ms: 330 }
     ];
 
     for (const s of steps) {
@@ -767,21 +715,16 @@
       document.documentElement.style.setProperty("--muted", dark ? "rgba(240,242,245,0.72)" : "rgba(0,0,0,0.70)");
       document.documentElement.style.setProperty("--shadow", dark ? "rgba(0,0,0,0.44)" : "rgba(0,0,0,0.16)");
       document.documentElement.style.setProperty("--shadow2", dark ? "rgba(0,0,0,0.26)" : "rgba(0,0,0,0.08)");
-    } catch (e) {
-      // If this ever fails, it’s almost always a CORS/canvas taint issue.
-      // With your /api/image proxy, it should now work reliably.
-    }
+    } catch {}
   }
 
   function normalizeFacts(data){
     const raw = data && data.facts ? data.facts : [];
     const out = [];
-
     for (const f of (Array.isArray(raw) ? raw : [])) {
       if (typeof f === "string") out.push({ text: f, source: "—" });
       else if (f && typeof f.text === "string") out.push({ text: f.text, source: f.source || "—" });
     }
-
     return out.filter(x => x.text && x.text.trim());
   }
 
@@ -810,25 +753,19 @@
       showFact(0, false);
       startFactRotation();
 
-      // ✅ FIXED IMAGE LOAD BLOCK (theming + spin + reveal)
+      // ✅ image load block (theming restored)
       if (data.cover) {
         const img = $("cover");
-
-        // harmless even with proxy; helps if you ever use a direct URL again
         img.crossOrigin = "anonymous";
-
         img.onload = () => {
-          applyThemeFromCover(img);          // <- restores title colour + background wash
+          applyThemeFromCover(img);
           img.style.animationPlayState = "running";
           stageReveal();
         };
-
         img.onerror = () => {
-          // If cover fails, still show everything else
           stageReveal();
         };
-
-        img.src = data.cover; // should be /api/image?url=... from your server.js
+        img.src = data.cover; // should be /api/image?url=...
       } else {
         stageReveal();
       }
