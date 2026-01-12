@@ -337,13 +337,13 @@
 
     .quote{
       position: relative;
-      font-size: 18px;            /* big */
+      font-size: 18px;
       font-weight: 700;
       line-height: 1.18;
       letter-spacing: -0.1px;
       opacity: 0.96;
       padding: 4px 2px 0 2px;
-      min-height: 110px;          /* holds layout as it rotates */
+      min-height: 110px;
     }
 
     .quote::before,
@@ -352,7 +352,7 @@
       font-size: 38px;
       font-weight: 900;
       line-height: 1;
-      color: var(--title);        /* quote marks match album title colour */
+      color: var(--title);
       opacity: 0.9;
     }
 
@@ -367,7 +367,6 @@
       bottom: -18px;
     }
 
-    /* Rotation animation */
     .quoteFade{
       opacity: 0;
       transform: translateY(6px);
@@ -402,7 +401,7 @@
       opacity: 0.95;
     }
 
-    /* ---------- FOOTER with Back button ---------- */
+    /* ---------- FOOTER ---------- */
     .footer{
       height: 22px;
       display:flex;
@@ -693,7 +692,6 @@
     $("label").textContent = "";
     $("cover").src = "";
 
-    // reset facts/quote
     stopFactRotation();
     factItems = [];
     factIndex = 0;
@@ -701,7 +699,6 @@
 
     if (!keepStatus) setStatus("Ready for scan…");
 
-    // reset theme (so the wash/title colour is obvious when next cover loads)
     document.documentElement.style.setProperty("--wash", "rgba(0,0,0,0)");
     document.documentElement.style.setProperty("--wash2", "rgba(0,0,0,0)");
     document.documentElement.style.setProperty("--title", "var(--fg)");
@@ -770,12 +767,13 @@
       document.documentElement.style.setProperty("--muted", dark ? "rgba(240,242,245,0.72)" : "rgba(0,0,0,0.70)");
       document.documentElement.style.setProperty("--shadow", dark ? "rgba(0,0,0,0.44)" : "rgba(0,0,0,0.16)");
       document.documentElement.style.setProperty("--shadow2", dark ? "rgba(0,0,0,0.26)" : "rgba(0,0,0,0.08)");
-    } catch {}
+    } catch (e) {
+      // If this ever fails, it’s almost always a CORS/canvas taint issue.
+      // With your /api/image proxy, it should now work reliably.
+    }
   }
 
   function normalizeFacts(data){
-    // server returns: facts: [{text, source}]
-    // but we also handle any older format: ["...", "..."]
     const raw = data && data.facts ? data.facts : [];
     const out = [];
 
@@ -807,24 +805,30 @@
       $("year").textContent = data.year ? `Year: ${data.year}` : "";
       $("label").textContent = (data.labels||[]).length ? `Label: ${data.labels[0]}` : "";
 
-      // facts (rotating)
       factItems = normalizeFacts(data);
       factIndex = 0;
       showFact(0, false);
       startFactRotation();
 
+      // ✅ FIXED IMAGE LOAD BLOCK (theming + spin + reveal)
       if (data.cover) {
         const img = $("cover");
+
+        // harmless even with proxy; helps if you ever use a direct URL again
+        img.crossOrigin = "anonymous";
+
         img.onload = () => {
-          // ✅ bring back title colour + background wash from cover
-          applyThemeFromCover(img);
-
-          // spin
+          applyThemeFromCover(img);          // <- restores title colour + background wash
           img.style.animationPlayState = "running";
-
           stageReveal();
         };
-        img.src = data.cover;
+
+        img.onerror = () => {
+          // If cover fails, still show everything else
+          stageReveal();
+        };
+
+        img.src = data.cover; // should be /api/image?url=... from your server.js
       } else {
         stageReveal();
       }
